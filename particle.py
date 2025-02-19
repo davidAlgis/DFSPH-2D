@@ -36,6 +36,9 @@ class Particle:
             SURFACE_TENSION: np.zeros(2, dtype=float)
         }
 
+        # Stores the list of neighbors for optimization
+        self.neighbors = []
+
     def reset_forces(self):
         """
         Reset all forces to zero before the next simulation step.
@@ -62,6 +65,14 @@ class Particle:
         :return: A 2D vector representing the total accumulated force.
         """
         return sum(self.forces.values(), np.zeros(2, dtype=float))
+
+    def set_neighbors(self, neighbors):
+        """
+        Store the list of neighboring particles for the current simulation step.
+
+        :param neighbors: List of neighboring Particle instances.
+        """
+        self.neighbors = neighbors
 
     def debug_forces(self):
         """
