@@ -1,4 +1,5 @@
 from grid import Grid
+from particle import Particle  # Import the updated Particle class
 
 
 def test_grid():
@@ -12,38 +13,34 @@ def test_grid():
 
     # Define some particles with positions
     particles = [
-        {
-            'position': [0.5, 0.5]
-        },  # Particle in cell (0, 0)
-        {
-            'position': [1.5, 1.5]
-        },  # Particle in cell (1, 1)
-        {
-            'position': [2.5, 2.5]
-        },  # Particle in cell (2, 2)
-        {
-            'position': [3.5, 3.5]
-        },  # Particle in cell (3, 3)
-        {
-            'position': [4.5, 4.5]
-        },  # Particle in cell (4, 4)
+        Particle(position=[0.5, 0.5], velocity=[0, 0], mass=1.0,
+                 h=1.0),  # Cell (0, 0)
+        Particle(position=[1.5, 1.5], velocity=[0, 0], mass=1.0,
+                 h=1.0),  # Cell (1, 1)
+        Particle(position=[2.5, 2.5], velocity=[0, 0], mass=1.0,
+                 h=1.0),  # Cell (2, 2)
+        Particle(position=[3.5, 3.5], velocity=[0, 0], mass=1.0,
+                 h=1.0),  # Cell (3, 3)
+        Particle(position=[4.5, 4.5], velocity=[0, 0], mass=1.0,
+                 h=1.0),  # Cell (4, 4)
     ]
 
-    # Update the grid with particle positions
+    # Update the grid with particles
     grid.update_grid(particles)
 
     # Test finding neighbors for the particle at index 2 (position [2.5, 2.5])
-    neighbors = grid.find_neighbors(2, particles)
+    neighbors = grid.find_neighbors(particles[2])
 
     # Expected neighbors are particles in adjacent cells
     expected_neighbors_positions = [
         [1.5, 1.5],  # Cell (1, 1)
         [3.5, 3.5],  # Cell (3, 3)
     ]
+
     # Check if the found neighbors match the expected neighbors
-    found_positions = [neighbor['position'] for neighbor in neighbors]
-    assert all(pos in found_positions for pos in expected_neighbors_positions
-               ), "Test failed: Neighbors do not match expected positions."
+    found_positions = [neighbor.position.tolist() for neighbor in neighbors]
+    assert all(pos in found_positions for pos in expected_neighbors_positions), \
+        f"Test failed: Neighbors do not match expected positions. Found: {found_positions}"
 
     print("Test passed: Neighbors match expected positions.")
 
