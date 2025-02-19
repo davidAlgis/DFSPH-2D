@@ -34,7 +34,7 @@ class SPHDrawer(app.Canvas):
         app.Canvas.__init__(self,
                             title='DFSPH Visualization',
                             keys='interactive',
-                            size=(800, 800))
+                            size=(600, 600))
         self.num_particles = num_particles
         self.particle_radius = particle_radius
 
