@@ -14,6 +14,7 @@ class Grid:
         """
         self.grid_size = grid_size
         self.grid_position = np.array(grid_position, dtype=float)
+        self.grid_end = self.grid_position + np.array(grid_size)
         self.cell_size = cell_size
         self.cells = self.initialize_cells()
 

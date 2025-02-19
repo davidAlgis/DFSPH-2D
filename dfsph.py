@@ -58,6 +58,29 @@ class DFSPHSim:
             particle.velocity += acceleration * self.dt
             particle.position += particle.velocity * self.dt
 
+    def apply_boundary_penalty(self, collider_damping=0.5):
+        """
+        Apply penalty to particles when they hit the boundary of the grid.
+        
+        :param collider_damping: Damping factor for boundary interaction.
+        """
+        for particle in self.particles:
+            # Apply penalty to X and Y positions separately
+            for i in range(2):  # For 2D, apply penalty to x (0) and y (1)
+                if particle.position[i] < self.grid.grid_position[
+                        i]:  # Particle hit the lower bound
+                    particle.position[
+                        i] = self.grid.grid_position[i] + self.h * (
+                            self.grid.grid_position[i] - particle.position[i])
+                    particle.velocity[
+                        i] *= -collider_damping  # Invert velocity with damping
+                elif particle.position[i] > self.grid.grid_end[
+                        i]:  # Particle hit the upper bound
+                    particle.position[i] = self.grid.grid_end[i] - self.h * (
+                        particle.position[i] - self.grid.grid_end[i])
+                    particle.velocity[
+                        i] *= -collider_damping  # Invert velocity with damping
+
     def update(self):
         """
         Perform a DFSPH update step, including:
@@ -74,6 +97,9 @@ class DFSPHSim:
 
         # Integrate positions and velocities
         self.integrate()
+
+        # Apply boundary penalties (i.e., handle particles hitting the boundary)
+        self.apply_boundary_penalty()
 
     def run(self, num_steps):
         """
