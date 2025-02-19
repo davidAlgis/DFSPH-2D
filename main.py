@@ -1,8 +1,22 @@
 import argparse
 import numpy as np
-from dfsph.simulator import DFSPHSim  # Import the DFSPHSim class
-from dfsph.drawer import SPHDrawer  # Import the visualization module
+from dfsph.simulator import DFSPHSim
+from dfsph.drawer import SPHDrawer
 from vispy import app
+
+
+def str2bool(v):
+    """
+    Converts a string argument to a boolean value.
+    """
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise ArgumentTypeError('Boolean value expected.')
 
 
 def main():
@@ -58,14 +72,11 @@ def main():
 
     # Visualization option (enabled by default; disable with --no-visualize)
     parser.add_argument(
+        "-v",
         "--visualize",
-        action="store_true",
+        type=str2bool,
         default=True,
         help="Enable real-time visualization using Vispy (default: enabled).")
-    parser.add_argument("--no-visualize",
-                        action="store_false",
-                        dest="visualize",
-                        help="Disable real-time visualization.")
 
     # Parse command-line arguments
     args = parser.parse_args()
