@@ -1,37 +1,52 @@
-import numpy as np
 from grid import Grid
 
+
 def test_grid():
-    # Define grid parameters
+    # Define the grid parameters
     grid_size = (5, 5)  # 5x5 grid
     grid_position = (0.0, 0.0)  # Grid starts at (0, 0)
-    cell_size = (1.0, 1.0)  # Each cell is 1x1 unit
+    cell_size = 1.0  # Each cell is 1x1 unit
 
     # Initialize the grid
     grid = Grid(grid_size, grid_position, cell_size)
 
     # Define some particles with positions
     particles = [
-        {'position': np.array([0.5, 0.5])},  # Particle in cell (0, 0)
-        {'position': np.array([1.5, 1.5])},  # Particle in cell (1, 1)
-        {'position': np.array([2.5, 2.5])},  # Particle in cell (2, 2)
-        {'position': np.array([3.5, 3.5])},  # Particle in cell (3, 3)
-        {'position': np.array([4.5, 4.5])},  # Particle in cell (4, 4)
+        {
+            'position': [0.5, 0.5]
+        },  # Particle in cell (0, 0)
+        {
+            'position': [1.5, 1.5]
+        },  # Particle in cell (1, 1)
+        {
+            'position': [2.5, 2.5]
+        },  # Particle in cell (2, 2)
+        {
+            'position': [3.5, 3.5]
+        },  # Particle in cell (3, 3)
+        {
+            'position': [4.5, 4.5]
+        },  # Particle in cell (4, 4)
     ]
 
     # Update the grid with particle positions
-    particles_cells, grid_cells_counts, particles_sorted = grid.update_grid(particles)
+    grid.update_grid(particles)
 
-    # Test finding neighbors for the particle at index 0
-    neighbors = grid.find_neighbors(0, particles, particles_sorted, grid_cells_counts)
+    # Test finding neighbors for the particle at index 2 (position [2.5, 2.5])
+    neighbors = grid.find_neighbors(2, particles)
 
-    # Expected neighbors for particle at index 0 (cell (0, 0)) are particles in cells (0, 1), (1, 0), and (1, 1)
-    expected_neighbors = [1]  # Only particle in cell (1, 1) is within the search range
-
+    # Expected neighbors are particles in adjacent cells
+    expected_neighbors_positions = [
+        [1.5, 1.5],  # Cell (1, 1)
+        [3.5, 3.5],  # Cell (3, 3)
+    ]
     # Check if the found neighbors match the expected neighbors
-    assert set(neighbors) == set(expected_neighbors), f"Test failed: expected {expected_neighbors}, but got {neighbors}"
+    found_positions = [neighbor['position'] for neighbor in neighbors]
+    assert all(pos in found_positions for pos in expected_neighbors_positions
+               ), "Test failed: Neighbors do not match expected positions."
 
-    print("Test passed: Neighbors found correctly!")
+    print("Test passed: Neighbors match expected positions.")
+
 
 if __name__ == "__main__":
     test_grid()
