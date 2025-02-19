@@ -57,7 +57,7 @@ class SPHDrawer(app.Canvas):
         gloo.set_clear_color((0.1, 0.1, 0.1, 1.0))
         gloo.set_state(blend=True,
                        blend_func=('src_alpha', 'one_minus_src_alpha'))
-
+        self._timer = None
         self.show()
 
     def set_particles(self, particles):
@@ -82,6 +82,17 @@ class SPHDrawer(app.Canvas):
         """
         gloo.clear()
         self.program.draw('points')
+
+    def add_update(self, timestep, update):
+        # Create a Vispy timer to call the update function every timestep
+        timer = app.Timer(interval=timestep, connect=update, start=True)
+        # Store the timer as an attribute to prevent it from being garbage collected.
+        self._timer = timer
+
+    def launch_update(self):
+
+        print("Starting simulation with visualization...")
+        app.run()  # Launch the Vispy event loop
 
 
 if __name__ == '__main__':

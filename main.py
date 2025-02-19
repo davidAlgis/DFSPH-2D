@@ -2,6 +2,7 @@ import argparse
 import numpy as np
 from dfsph import DFSPHSim  # Import the DFSPHSim class
 from sph_drawer import SPHDrawer  # Import the visualization module
+from vispy import app
 
 
 def main():
@@ -55,7 +56,7 @@ def main():
                         default=1.0,
                         help="Size of each cell in the grid (default: 1.0)")
 
-    # Visualization option (enabled by default, can be disabled with --no-visualize)
+    # Visualization option (enabled by default; disable with --no-visualize)
     parser.add_argument(
         "--visualize",
         action="store_true",
@@ -69,7 +70,7 @@ def main():
     # Parse command-line arguments
     args = parser.parse_args()
 
-    # Create and launch the DFSPH simulation
+    # Create the simulation instance
     sim = DFSPHSim(num_particles=args.num_particles,
                    h=args.support_radius,
                    mass=args.mass,
@@ -78,14 +79,24 @@ def main():
                    grid_position=tuple(args.grid_position),
                    cell_size=args.cell_size)
 
-    print(f"Starting simulation with {args.num_particles} particles...")
-
     if args.visualize:
-        print("Launching real-time visualization...")
-        drawer = SPHDrawer(sim)
-        drawer.run_simulation()  # Starts the Vispy event loop
+        # Create the visualization drawer (decoupled from physics)
+        drawer = SPHDrawer(num_particles=args.num_particles)
+
+        # Define an update function that runs one simulation update and feeds new particles to the drawer
+        def update_sim(event):
+            sim.update()
+            drawer.set_particles(sim.particles)
+
+        drawer.add_update(args.timestep, update_sim)
+        drawer.launch_update()
+
     else:
-        sim.run(args.steps)
+        print(f"Starting simulation with {args.num_particles} particles...")
+        for i in range(args.steps):
+            sim.update()
+            if i % 100 == 0:
+                print(f"Step {i}/{args.steps} complete.")
         print("Simulation completed.")
 
 
