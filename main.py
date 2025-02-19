@@ -1,8 +1,7 @@
 import argparse
 import numpy as np
 from dfsph import DFSPHSim  # Import the DFSPHSim class
-from grid import Grid  # Ensure the grid system is available
-from particle import Particle  # Ensure particles are correctly loaded
+from sph_drawer import SPHDrawer  # Import the visualization module
 
 
 def main():
@@ -22,12 +21,11 @@ def main():
                         type=float,
                         default=1.0,
                         help="Mass of each particle (default: 1.0)")
-    parser.add_argument(
-        "-r",
-        "--support_radius",
-        type=float,
-        default=1.0,
-        help="SPH support radius (default: 1.0)")  # Changed from -h to -r
+    parser.add_argument("-r",
+                        "--support_radius",
+                        type=float,
+                        default=1.0,
+                        help="SPH support radius (default: 1.0)")
     parser.add_argument("-dt",
                         "--timestep",
                         type=float,
@@ -57,25 +55,38 @@ def main():
                         default=1.0,
                         help="Size of each cell in the grid (default: 1.0)")
 
+    # Visualization option (enabled by default, can be disabled with --no-visualize)
+    parser.add_argument(
+        "--visualize",
+        action="store_true",
+        default=True,
+        help="Enable real-time visualization using Vispy (default: enabled).")
+    parser.add_argument("--no-visualize",
+                        action="store_false",
+                        dest="visualize",
+                        help="Disable real-time visualization.")
+
     # Parse command-line arguments
     args = parser.parse_args()
 
     # Create and launch the DFSPH simulation
-    sim = DFSPHSim(
-        num_particles=args.num_particles,
-        h=args.support_radius,  # Updated variable name
-        mass=args.mass,
-        dt=args.timestep,
-        grid_size=tuple(args.grid_size),
-        grid_position=tuple(args.grid_position),
-        cell_size=args.cell_size)
+    sim = DFSPHSim(num_particles=args.num_particles,
+                   h=args.support_radius,
+                   mass=args.mass,
+                   dt=args.timestep,
+                   grid_size=tuple(args.grid_size),
+                   grid_position=tuple(args.grid_position),
+                   cell_size=args.cell_size)
 
     print(f"Starting simulation with {args.num_particles} particles...")
 
-    # Run the simulation
-    sim.run(args.steps)
-
-    print("Simulation completed.")
+    if args.visualize:
+        print("Launching real-time visualization...")
+        drawer = SPHDrawer(sim)
+        drawer.run_simulation()  # Starts the Vispy event loop
+    else:
+        sim.run(args.steps)
+        print("Simulation completed.")
 
 
 if __name__ == "__main__":
