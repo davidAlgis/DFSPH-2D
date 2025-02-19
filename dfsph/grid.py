@@ -1,5 +1,5 @@
 import numpy as np
-from particle import Particle  # Import the Particle class
+from dfsph.particle import Particle  # Import the Particle class
 
 
 class Grid:

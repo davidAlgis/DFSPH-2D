@@ -1,5 +1,6 @@
-from grid import Grid
-from particle import Particle  # Import the updated Particle class
+# Adjust imports for the new structure
+from dfsph.grid import Grid
+from dfsph.particle import Particle
 
 
 def test_grid():
@@ -43,7 +44,3 @@ def test_grid():
         f"Test failed: Neighbors do not match expected positions. Found: {found_positions}"
 
     print("Test passed: Neighbors match expected positions.")
-
-
-if __name__ == "__main__":
-    test_grid()

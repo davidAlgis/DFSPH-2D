@@ -1,6 +1,6 @@
 import numpy as np
-from grid import Grid
-from particle import Particle, PRESSURE, VISCOSITY, EXTERNAL, SURFACE_TENSION
+from dfsph.grid import Grid
+from dfsph.particle import Particle, PRESSURE, VISCOSITY, EXTERNAL, SURFACE_TENSION
 
 
 class DFSPHSim:

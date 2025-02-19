@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
-from dfsph import DFSPHSim  # Import the DFSPHSim class
-from sph_drawer import SPHDrawer  # Import the visualization module
+from dfsph.simulator import DFSPHSim  # Import the DFSPHSim class
+from dfsph.drawer import SPHDrawer  # Import the visualization module
 from vispy import app
 
 
