@@ -2,71 +2,6 @@ import numpy as np
 from vispy import app, gloo
 from vispy.util.transforms import ortho
 
-
-class SPHDrawer(app.Canvas):
-    def __init__(self, sim, particle_radius=0.02):
-        """
-        Initialize the Vispy visualization for SPH particles.
-
-        :param sim: Instance of DFSPHSim (the simulation object).
-        :param particle_radius: Radius of the particles in the visualization.
-        """
-        app.Canvas.__init__(self, title='DFSPH Visualization', keys='interactive', size=(800, 800))
-
-        self.sim = sim  # The DFSPH simulation instance
-        self.particle_radius = particle_radius
-
-        # OpenGL shader programs
-        self.program = gloo.Program(vertex_shader, fragment_shader)
-
-        # Particle positions (initialized to zeros)
-        self.data = np.zeros(len(self.sim.particles), dtype=[('a_position', np.float32, 2)])
-
-        # Initialize GPU buffer
-        self.program.bind(gloo.VertexBuffer(self.data))
-
-        # Set up orthographic projection matrix
-        self.view_matrix = ortho(0, 10, 0, 10, -1, 1)
-        self.program['u_matrix'] = self.view_matrix
-
-        # OpenGL settings
-        gloo.set_clear_color((0.1, 0.1, 0.1, 1.0))  # Background color
-        gloo.set_state(blend=True, blend_func=('src_alpha', 'one_minus_src_alpha'))
-
-        self.show()
-
-    def update_particles(self):
-        """
-        Update particle positions from the simulation.
-        """
-        for i, particle in enumerate(self.sim.particles):
-            self.data[i]['a_position'] = particle.position
-
-        # Update GPU buffer
-        self.program.bind(gloo.VertexBuffer(self.data))
-
-        # Redraw canvas
-        self.update()
-
-    def on_draw(self, event):
-        """
-        Render the scene.
-        """
-        gloo.clear()
-        self.program.draw('points')
-
-    def run_simulation(self, num_steps=1000):
-        """
-        Run the SPH simulation with visualization.
-
-        :param num_steps: Number of simulation steps.
-        """
-        for step in range(num_steps):
-            self.sim.update()
-            self.update_particles()
-            app.process_events()
-
-
 # Vertex Shader
 vertex_shader = """
 #version 120
@@ -86,20 +21,98 @@ void main() {
 }
 """
 
+
+class SPHDrawer(app.Canvas):
+
+    def __init__(self, num_particles, particle_radius=0.02):
+        """
+        Initialize the Vispy visualization for SPH particles.
+        
+        :param num_particles: The maximum number of particles to display.
+        :param particle_radius: Radius of the particles in the visualization.
+        """
+        app.Canvas.__init__(self,
+                            title='DFSPH Visualization',
+                            keys='interactive',
+                            size=(800, 800))
+        self.num_particles = num_particles
+        self.particle_radius = particle_radius
+
+        # Create the OpenGL program with shaders
+        self.program = gloo.Program(vertex_shader, fragment_shader)
+
+        # Allocate a structured array for particle positions
+        self.data = np.zeros(self.num_particles,
+                             dtype=[('a_position', np.float32, 2)])
+
+        # Create and bind the GPU buffer
+        self.vertex_buffer = gloo.VertexBuffer(self.data)
+        self.program.bind(self.vertex_buffer)
+
+        # Set up an orthographic projection matrix for the view
+        self.view_matrix = ortho(0, 10, 0, 10, -1, 1)
+        self.program['u_matrix'] = self.view_matrix
+
+        # OpenGL settings: clear color and blending
+        gloo.set_clear_color((0.1, 0.1, 0.1, 1.0))
+        gloo.set_state(blend=True,
+                       blend_func=('src_alpha', 'one_minus_src_alpha'))
+
+        self.show()
+
+    def set_particles(self, particles):
+        """
+        Update the visualization with a new list of particles.
+        
+        :param particles: List of Particle instances.
+        """
+        # Update our data array with particle positions.
+        # Only update as many particles as available (up to num_particles).
+        for i, particle in enumerate(particles):
+            if i < self.num_particles:
+                self.data[i]['a_position'] = particle.position
+        # Update the GPU buffer with the new data.
+        self.vertex_buffer.set_data(self.data)
+        # Request a redraw of the canvas.
+        self.update()
+
+    def on_draw(self, event):
+        """
+        Render the scene.
+        """
+        gloo.clear()
+        self.program.draw('points')
+
+
 if __name__ == '__main__':
-    from dfsph import DFSPHSim
+    # This block is for testing the drawer independently.
+    # It creates dummy particles and updates the drawer periodically.
+    from time import sleep
 
-    # Initialize the simulation
-    sim = DFSPHSim(
-        num_particles=500,
-        h=1.0,
-        mass=1.0,
-        dt=0.01,
-        grid_size=(50, 50),
-        grid_position=(0, 0),
-        cell_size=1.0
-    )
+    # Dummy Particle class for testing (replace with your actual Particle class)
+    class Particle:
 
-    # Create visualization and run simulation
-    drawer = SPHDrawer(sim)
-    drawer.run_simulation(1000)
+        def __init__(self, position):
+            self.position = np.array(position, dtype=float)
+
+    # Create a list of 10 dummy particles with random positions.
+    num_particles = 10
+    particles = [
+        Particle(np.random.rand(2) * 10) for _ in range(num_particles)
+    ]
+
+    # Initialize the SPHDrawer with the number of particles.
+    drawer = SPHDrawer(num_particles=num_particles)
+
+    # Simple function to update particle positions randomly.
+    def update_test(event):
+        global particles
+        # Randomly perturb each particle's position.
+        for p in particles:
+            p.position += np.random.uniform(-0.1, 0.1, 2)
+        drawer.set_particles(particles)
+
+    # Set up a timer to trigger updates.
+    timer = app.Timer(interval=0.05, connect=update_test, start=True)
+
+    app.run()
