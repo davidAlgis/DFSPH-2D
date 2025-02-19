@@ -1,4 +1,4 @@
-# Adjust imports for the new structure
+import pytest
 from dfsph.grid import Grid
 from dfsph.particle import Particle
 
@@ -6,7 +6,7 @@ from dfsph.particle import Particle
 def test_grid():
     # Define the grid parameters
     grid_size = (5, 5)  # 5x5 grid
-    grid_position = (0.0, 0.0)  # Grid starts at (0, 0)
+    grid_position = (0.0, 0.0)  # Grid starts at (0.0, 0.0)
     cell_size = 1.0  # Each cell is 1x1 unit
 
     # Initialize the grid
@@ -33,14 +33,11 @@ def test_grid():
     neighbors = grid.find_neighbors(particles[2])
 
     # Expected neighbors are particles in adjacent cells
-    expected_neighbors_positions = [
-        [1.5, 1.5],  # Cell (1, 1)
-        [3.5, 3.5],  # Cell (3, 3)
+    expected_neighbors = [
+        particles[1],  # Particle at [1.5, 1.5]
+        particles[3],  # Particle at [3.5, 3.5]
     ]
 
     # Check if the found neighbors match the expected neighbors
-    found_positions = [neighbor.position.tolist() for neighbor in neighbors]
-    assert all(pos in found_positions for pos in expected_neighbors_positions), \
-        f"Test failed: Neighbors do not match expected positions. Found: {found_positions}"
-
-    print("Test passed: Neighbors match expected positions.")
+    assert set(neighbors) == set(expected_neighbors), \
+        f"Test failed: Neighbors do not match expected particles. Found: {neighbors}"
