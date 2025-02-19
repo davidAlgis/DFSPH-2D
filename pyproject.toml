@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "DFSPH 2D"
+version = "0.1.0"
+description = ""
+readme = "README.md"
+requires-python = ">=3.6"
+license = { file = "LICENSE" }
+authors = [
+    { name = "David Algis", email = "david.algis@tutamail.com" }
+]
+dependencies = [
+    "numpy",
+    "vispy"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "black",
+    "flake8"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/davidAlgis/DFSPH-2D"
+"Bug Tracker" = "https://github.com/davidAlgis/DFSPH-2D/issues"
