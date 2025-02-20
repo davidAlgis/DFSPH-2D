@@ -23,30 +23,34 @@ class SPHDrawer:
         :param particle_radius: Radius of the particles in pixels.
         """
         pygame.init()
-        self.width = width
-        self.height = height
-        self.particle_radius = particle_radius
-        self.num_particles = num_particles
-        self.grid_size = np.array(grid_size,
-                                  dtype=float)  # Ensure float for scaling
+
+        # Ensure float for scaling & avoid integer division
+        self.grid_size = np.array(grid_size, dtype=float)
         self.grid_position = np.array(grid_position, dtype=float)
 
-        # Compute scaling factors for coordinate transformation
+        # Set screen size based on grid size (maintaining aspect ratio)
+        aspect_ratio = self.grid_size[0] / self.grid_size[1]
+        self.width = width
+        self.height = int(width /
+                          aspect_ratio) if aspect_ratio >= 1 else height
+        self.particle_radius = particle_radius
+
+        # Compute scaling factors to fit grid perfectly
         self.scale_x = self.width / self.grid_size[0]
         self.scale_y = self.height / self.grid_size[1]
 
-        # Initialize the screen with hardware acceleration
+        # Initialize the screen
         self.screen = pygame.display.set_mode(
             (self.width, self.height), pygame.DOUBLEBUF | pygame.HWSURFACE)
         pygame.display.set_caption("DFSPH Visualization")
 
-        # Background and particle colors
+        # Colors
         self.bg_color = (25, 25, 25)
         self.particle_color = (50, 150, 255)
         self.border_color = (255, 255, 255)  # White border
         self.grid_color = (100, 100, 100)  # Gray grid lines
 
-        # Pre-rendered particle for faster drawing
+        # Pre-rendered particle for fast drawing
         self.particle_surf = pygame.Surface(
             (self.particle_radius * 2, self.particle_radius * 2),
             pygame.SRCALPHA)
@@ -102,7 +106,7 @@ class SPHDrawer:
             pygame.draw.line(self.screen, self.grid_color, (top_left[0], y),
                              (bottom_right[0], y), 1)
 
-        # Draw border
+        # Draw border (perfectly enclosing the grid)
         pygame.draw.rect(self.screen, self.border_color,
                          (top_left[0], bottom_right[1], bottom_right[0] -
                           top_left[0], top_left[1] - bottom_right[1]), 2)
@@ -141,8 +145,9 @@ class SPHDrawer:
         sim_thread.start()
 
         while self.running:
-            for event in pygame.event.get(pygame.QUIT):
-                self.running = False
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
 
             self.draw_particles()
             self.clock.tick(30)  # Limit FPS to 30
