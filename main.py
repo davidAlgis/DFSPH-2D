@@ -39,7 +39,7 @@ def main():
     parser.add_argument("-r",
                         "--support_radius",
                         type=float,
-                        default=1.0,
+                        default=0.2742,
                         help="SPH support radius (default: 1.0)")
     parser.add_argument("-dt",
                         "--timestep",
@@ -57,7 +57,7 @@ def main():
         "--grid_size",
         type=int,
         nargs=2,
-        default=[50, 50],
+        default=[10, 10],
         help="Size of the grid as (width, height) (default: 50 50)")
     parser.add_argument(
         "--grid_position",
@@ -67,7 +67,7 @@ def main():
         help="Position of the grid in simulation space (default: 0.0 0.0)")
     parser.add_argument("--cell_size",
                         type=float,
-                        default=1.0,
+                        default=0.2742,
                         help="Size of each cell in the grid (default: 1.0)")
 
     # Visualization option
@@ -84,7 +84,7 @@ def main():
                                args.num_particles,
                                args.mass,
                                args.support_radius,
-                               spacing=1.0)
+                               spacing=0.1371)
 
     # Create the simulation instance
     sim = DFSPHSim(particles,
@@ -96,7 +96,9 @@ def main():
 
     if args.visualize:
         # Create the visualization drawer
-        drawer = SPHDrawer(num_particles=len(particles))
+        drawer = SPHDrawer(num_particles=len(particles),
+                           grid_size=args.grid_size,
+                           grid_position=args.grid_position)
 
         # Define an update function for simulation
         def update_sim():
