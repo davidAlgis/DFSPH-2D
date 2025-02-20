@@ -98,21 +98,21 @@ class DFSPHSim:
         """
         return np.array([p.density for p in self.particles], dtype=np.float64)
 
-    def apply_external_forces(self):
+    def predict_intermediate_velocity(self):
         """
         Apply external forces (like gravity) to all particles.
         """
         for particle in self.particles:
             particle.add_force(EXTERNAL, particle.mass * self.gravity)
+            total_force = particle.total_force()
+            acceleration = total_force / particle.mass
+            particle.velocity += acceleration * self.dt
 
     def integrate(self):
         """
         Integrate particle velocities and positions using Euler integration.
         """
         for particle in self.particles:
-            total_force = particle.total_force()
-            acceleration = total_force / particle.mass
-            particle.velocity += acceleration * self.dt
             particle.position += particle.velocity * self.dt
 
     def apply_boundary_penalty(self, collider_damping=0.5):
@@ -162,6 +162,6 @@ class DFSPHSim:
         self.find_neighbors()
         self.compute_density_and_alpha()
         self.compute_viscosity_forces()
-        self.apply_external_forces()
+        self.predict_intermediate_velocity()
         self.integrate()
         self.apply_boundary_penalty()
