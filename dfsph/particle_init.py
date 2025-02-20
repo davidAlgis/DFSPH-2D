@@ -59,7 +59,7 @@ def staggered_init(num_particles_x,
                 box_origin[1] + j * spacing
             ])
             velocity = np.zeros(2)
-            particles.append(Particle(position, velocity, mass, h))
+            particles.append(Particle(count, position, velocity, mass, h))
 
             count += 1
 

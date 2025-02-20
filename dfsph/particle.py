@@ -9,7 +9,7 @@ SURFACE_TENSION = "surface_tension"
 
 class Particle:
 
-    def __init__(self, position, velocity, mass, h):
+    def __init__(self, index, position, velocity, mass, h):
         """
         Initialize a Particle object with its properties.
 
@@ -18,14 +18,16 @@ class Particle:
         :param mass: Mass of the particle.
         :param h: Support radius used in SPH calculations.
         """
+        self.index = index
         self.position = np.array(position, dtype=float)
         self.velocity = np.array(velocity, dtype=float)
         self.mass = mass
         self.h = h
 
         # SPH-related properties
-        self.density = 0.0  # Computed density
-        self.pressure = 0.0  # Computed pressure
+        self.density = 0.0
+        self.alpha = 0.0
+        self.pressure = 0.0
 
         # Force dictionary for debugging each force separately
         self.forces = {
@@ -81,21 +83,3 @@ class Particle:
         print("Forces acting on the particle:")
         for force_id, force_value in self.forces.items():
             print(f"  {force_id}: {force_value}")
-
-
-# Example usage:
-if __name__ == '__main__':
-    # Create a particle at position (0,0) with initial velocity (1,0), mass 1, and support radius 1.0.
-    particle = Particle(position=[0, 0], velocity=[1, 0], mass=1.0, h=1.0)
-
-    # Apply different forces using global force IDs
-    particle.add_force(EXTERNAL, [0, -9.81])  # Gravity
-    particle.add_force(PRESSURE, [2, 3])  # Example pressure force
-    particle.add_force(VISCOSITY, [-0.5, -0.2])  # Example viscosity force
-
-    # Debug forces before updating
-    particle.debug_forces()
-
-    # Print updated state
-    print("Position:", particle.position)
-    print("Velocity:", particle.velocity)

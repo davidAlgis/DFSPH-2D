@@ -14,15 +14,15 @@ def test_grid():
 
     # Define some particles with positions
     particles = [
-        Particle(position=[0.5, 0.5], velocity=[0, 0], mass=1.0,
+        Particle(0, position=[0.5, 0.5], velocity=[0, 0], mass=1.0,
                  h=1.0),  # Cell (0, 0)
-        Particle(position=[1.5, 1.5], velocity=[0, 0], mass=1.0,
+        Particle(1, position=[1.5, 1.5], velocity=[0, 0], mass=1.0,
                  h=1.0),  # Cell (1, 1)
-        Particle(position=[2.5, 2.5], velocity=[0, 0], mass=1.0,
+        Particle(2, position=[2.5, 2.5], velocity=[0, 0], mass=1.0,
                  h=1.0),  # Cell (2, 2)
-        Particle(position=[3.5, 3.5], velocity=[0, 0], mass=1.0,
+        Particle(3, position=[3.5, 3.5], velocity=[0, 0], mass=1.0,
                  h=1.0),  # Cell (3, 3)
-        Particle(position=[4.5, 4.5], velocity=[0, 0], mass=1.0,
+        Particle(4, position=[4.5, 4.5], velocity=[0, 0], mass=1.0,
                  h=1.0),  # Cell (4, 4)
     ]
 
