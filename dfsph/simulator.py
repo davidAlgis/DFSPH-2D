@@ -1,7 +1,7 @@
 import numpy as np
 from dfsph.grid import Grid
 from dfsph.particle import PRESSURE, VISCOSITY, EXTERNAL, SURFACE_TENSION
-from dfsph.kernels import w, grad_w
+import dfsph.sph_accelerated
 
 
 class DFSPHSim:
@@ -20,7 +20,7 @@ class DFSPHSim:
         :param particles: List of Particle instances.
         :param h: Support radius for SPH.
         :param dt: Time step.
-        :param grid_size: Grid size (tuple).
+        :param grid_size: Grid size (tuple) representing the physical dimensions.
         :param grid_position: Grid starting position (tuple).
         :param cell_size: Size of each grid cell.
         :param rest_density: Rest density of the fluid.
@@ -39,35 +39,58 @@ class DFSPHSim:
         self.gravity = np.array([0, -9.81])  # Gravity force
         self.viscosity = 0.1  # Example: viscosity coefficient
 
+    def _pack_particle_data(self):
+        """
+        Pack particle data (positions and masses) into arrays.
+        Also create flattened neighbor index array and arrays for neighbor start indices and counts.
+        
+        Returns:
+            positions: (N,2) array of particle positions.
+            masses: (N,) array of particle masses.
+            neighbor_indices: 1D array of neighbor indices.
+            neighbor_starts: 1D array of starting indices for each particle.
+            neighbor_counts: 1D array of neighbor counts for each particle.
+        """
+        N = self.num_particles
+        positions = np.empty((N, 2), dtype=np.float64)
+        masses = np.empty(N, dtype=np.float64)
+        neighbor_counts = np.empty(N, dtype=np.int32)
+        neighbor_starts = np.empty(N, dtype=np.int32)
+
+        # Collect neighbor indices
+        neighbor_list = []
+        for i, particle in enumerate(self.particles):
+            positions[i, :] = particle.position
+            masses[i] = particle.mass
+            n_neighbors = len(particle.neighbors)
+            neighbor_counts[i] = n_neighbors
+            neighbor_starts[i] = len(neighbor_list)
+            for neighbor in particle.neighbors:
+                neighbor_list.append(neighbor.index)  # Use the particle index
+
+        neighbor_indices = np.array(neighbor_list, dtype=np.int32)
+        return positions, masses, neighbor_indices, neighbor_starts, neighbor_counts
+
     def compute_density_and_alpha(self):
         """
-        Compute the density and alpha coefficient for each particle.
+        Compute the density and alpha coefficient for each particle using Numba.
         """
-        min_density = self.rest_density / 100.0
-        mean_density = 0
+        # Pack particle data into arrays
+        positions, masses, neighbor_indices, neighbor_starts, neighbor_counts = self._pack_particle_data(
+        )
+
+        # Call the numba-accelerated function
+        densities, alphas = dfsph.sph_accelerated.compute_density_alpha_numba(
+            positions, masses, neighbor_indices, neighbor_starts,
+            neighbor_counts, self.h, self.rest_density)
+
+        total_density = 0.0
         for i, particle in enumerate(self.particles):
+            particle.density = densities[i]
+            particle.alpha = alphas[i]
+            total_density += densities[i]
 
-            density_fluid = 0.0
-            sum_abs = np.zeros(2)
-            abs_sum = 0.0
-            for neighbor in particle.neighbors:
-
-                wij = w(particle.position, neighbor.position, self.h)
-                grad_wij = grad_w(particle.position, neighbor.position, self.h)
-
-                # Fluid contribution
-                density_fluid += neighbor.mass * wij
-                sum_abs += neighbor.mass * grad_wij
-                abs_sum += (neighbor.mass**2) * np.dot(grad_wij, grad_wij)
-
-            # Store density (clamped to avoid division by zero)
-            particle.density = max(min_density, density_fluid)
-            mean_density += particle.density
-            # Compute alpha (avoid division by zero)
-            particle.alpha = density_fluid / max(
-                1e-5,
-                np.dot(sum_abs, sum_abs) + abs_sum)
-        self.mean_density = mean_density / self.num_particles
+        self.mean_density = total_density / self.num_particles
 
     def apply_external_forces(self):
         """
@@ -83,8 +106,6 @@ class DFSPHSim:
         for particle in self.particles:
             total_force = particle.total_force()
             acceleration = total_force / particle.mass
-
-            # Update velocity and position
             particle.velocity += acceleration * self.dt
             particle.position += particle.velocity * self.dt
 
@@ -96,14 +117,13 @@ class DFSPHSim:
         """
         for particle in self.particles:
             for i in range(2):  # For 2D, apply penalty to x (0) and y (1)
-                if particle.position[i] < self.grid.grid_position[
-                        i]:  # Lower bound
+                if particle.position[i] < self.grid.grid_position[i]:
                     particle.position[
                         i] = self.grid.grid_position[i] + self.h * (
                             self.grid.grid_position[i] - particle.position[i])
                     particle.velocity[i] *= -collider_damping
                 elif particle.position[i] > self.grid.grid_position[
-                        i] + self.grid.grid_size[i]:  # Upper bound
+                        i] + self.grid.grid_size[i]:
                     particle.position[i] = (
                         self.grid.grid_position[i] + self.grid.grid_size[i]
                     ) - self.h * (
@@ -112,17 +132,19 @@ class DFSPHSim:
                     particle.velocity[i] *= -collider_damping
 
     def find_neighbors(self):
-        # Update the grid to store particles in their respective cells
+        """
+        Update each particle's neighbor list using the grid.
+        """
         self.grid.update_grid(self.particles)
-        for i, particle in enumerate(self.particles):
-            neighbors = self.grid.find_neighbors(particle)
-            particle.neighbors = neighbors
+        for particle in self.particles:
+            particle.neighbors = self.grid.find_neighbors(particle)
 
     def update(self):
         """
         Perform a DFSPH update step, including:
         - Resetting forces
-        - Computing density and alpha
+        - Finding neighbors
+        - Computing density and alpha using Numba
         - Applying external forces
         - Integrating velocities and positions
         - Applying boundary penalties
@@ -131,15 +153,7 @@ class DFSPHSim:
             particle.reset_forces()
 
         self.find_neighbors()
-
-        # Compute density and alpha values for DFSPH
         self.compute_density_and_alpha()
-
-        # Apply external forces (e.g., gravity)
-        # self.apply_external_forces()
-
-        # Integrate positions and velocities
+        self.apply_external_forces()
         self.integrate()
-
-        # Apply boundary penalties
         self.apply_boundary_penalty()

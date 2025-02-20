@@ -14,7 +14,8 @@ authors = [
 ]
 dependencies = [
     "numpy",
-    "pygame"
+    "pygame",
+    "numba"
 ]
 
 [project.optional-dependencies]

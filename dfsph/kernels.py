@@ -1,27 +1,98 @@
 import numpy as np
-# I inspired myself from https://github.com/christophmschaefer/miluphcuda/blob/eab10e7eceb9cc6f833c37d491c9a8dd0a540424/kernel.cu
+from numba import njit
+
 # Normalization factors for the cubic spline 0-1 kernel in 2D
 CUBIC_SPLINE_01_FACTOR = 40.0 / (7 * np.pi)  # 2D normalization factor
-CUBIC_SPLINE_01_GRADIENT_FACTOR = CUBIC_SPLINE_01_FACTOR * 6.0  # Factor for the gradient
+CUBIC_SPLINE_01_GRADIENT_FACTOR = CUBIC_SPLINE_01_FACTOR * 6.0  # Gradient factor
+__CUBIC_KERNEL_FACTOR = 10 / (7 * np.pi
+                              )  # Normalization for cubic spline kernel
 
 
-def kernel_cubic_spline(xI, xJ, h):
+@njit
+def cubic_kernel_numba(xI, xJ, h):
     """
-    Computes the 2D Cubic Spline Kernel for the 0-1 interval (used in SPH).
-
-    Kernel formula:
-        - If 0 <= q <= 0.5:  W = f * (6 * q^3 - 6 * q^2 + 1)
-        - If 0.5 < q < 1:    W = 2 * f * (1 - q)^3
-        - If q >= 1:         W = 0
-
-    :param xI: Position of particle I (numpy array)
-    :param xJ: Position of particle J (numpy array)
-    :param h: The smoothing length (kernel radius)
+    Computes the cubic spline smoothing kernel value in 2D.
+    
+    Uses the piecewise function:
+        - If 0 <= q <= 1:  W = (1 - 1.5*q^2 + 0.75*q^3)
+        - If 1 < q < 2:    W = 0.25 * (2 - q)^3
+        - If q >= 2:       W = 0
+    
+    :param xI: Position of particle I (NumPy array)
+    :param xJ: Position of particle J (NumPy array)
+    :param h: Support radius
     :return: Kernel value W
     """
-    r = xI - xJ
-    r_length = np.linalg.norm(r)  # Compute |r|
-    q = r_length / h if r_length > 1e-5 else 0.0  # Normalize distance
+    dx = xI[0] - xJ[0]
+    dy = xI[1] - xJ[1]
+    r2 = dx * dx + dy * dy
+    r = np.sqrt(r2)
+
+    half_h = h / 2.0
+    k = __CUBIC_KERNEL_FACTOR / (half_h**2)
+    q = r / half_h
+
+    if q >= 2.0:
+        return 0.0
+    elif q <= 1.0:
+        q2 = q * q
+        return k * (1 - 1.5 * q2 + 0.75 * q2 * q)
+    else:
+        return k * 0.25 * (2 - q)**3
+
+
+@njit
+def cubic_grad_kernel_numba(xI, xJ, h):
+    """
+    Computes the gradient of the cubic spline smoothing kernel in 2D.
+
+    Uses the piecewise function:
+        - If 0 <= q <= 1:  grad_W = (-3*q + 2.25*q^2) * (r / |r|)
+        - If 1 < q < 2:    grad_W = -0.75 * (2 - q)^2 * (r / |r|)
+        - If q >= 2:       grad_W = 0
+
+    :param xI: Position of particle I (NumPy array)
+    :param xJ: Position of particle J (NumPy array)
+    :param h: Support radius
+    :return: Gradient of the cubic spline kernel (NumPy array)
+    """
+    dx = xI[0] - xJ[0]
+    dy = xI[1] - xJ[1]
+    r2 = dx * dx + dy * dy
+    r = np.sqrt(r2)
+
+    if r < 1e-5:
+        return np.array([0.0, 0.0])  # Avoid division by zero
+
+    half_h = h / 2.0
+    k = __CUBIC_KERNEL_FACTOR / (half_h**2)
+    q = r / half_h
+    inv_r = 1.0 / r if r > 1e-5 else 0.0  # Safe inverse
+
+    grad_w = 0.0
+    if q < 1.0:
+        grad_w = (k / half_h) * (-3.0 * q + 2.25 * q * q)
+    elif q < 2.0:
+        grad_w = -0.75 * (k / half_h) * (2.0 - q)**2
+
+    return grad_w * inv_r * np.array([dx, dy])
+
+
+@njit
+def cubic_kernel_01_numba(xI, xJ, h):
+    """
+    Computes the cubic spline kernel (0-1 variant) in 2D.
+
+    :param xI: Position of particle I
+    :param xJ: Position of particle J
+    :param h: Smoothing length
+    :return: Kernel value
+    """
+    dx = xI[0] - xJ[0]
+    dy = xI[1] - xJ[1]
+    r2 = dx * dx + dy * dy
+    r = np.sqrt(r2)
+    q = r / h if r > 1e-5 else 0.0
 
     if q >= 1.0:
         return 0.0
@@ -31,30 +102,25 @@ def kernel_cubic_spline(xI, xJ, h):
         return 2 * CUBIC_SPLINE_01_FACTOR * (1 - q)**3
 
 
-def grad_kernel_cubic_spline(xI, xJ, h):
+@njit
+def cubic_grad_kernel_01_numba(xI, xJ, h):
     """
-    Computes the gradient of the 2D Cubic Spline Kernel for the 0-1 interval.
+    Computes the gradient of the cubic spline kernel (0-1 variant).
 
-    Gradient formula:
-        - If 0 <= q <= 0.5:  dWdr = 6 * f / h * (3 * q^2 - 2 * q)
-        - If 0.5 < q < 1:    dWdr = -6 * f / h * (1 - q)^2
-        - If q >= 1:         dWdr = 0
-
-    The gradient is computed as:
-        ∇W = (dW/dr) * (r / |r|)
-
-    :param xI: Position of particle I (numpy array)
-    :param xJ: Position of particle J (numpy array)
-    :param h: The smoothing length (kernel radius)
-    :return: Gradient of the cubic spline kernel (numpy array)
+    :param xI: Position of particle I
+    :param xJ: Position of particle J
+    :param h: Smoothing length
+    :return: Gradient (NumPy array)
     """
-    r = xI - xJ
-    r_length = np.linalg.norm(r)  # Compute |r|
-    if r_length < 1e-5:
-        return np.zeros(2)  # Avoid division by zero
+    dx = xI[0] - xJ[0]
+    dy = xI[1] - xJ[1]
+    r2 = dx * dx + dy * dy
+    r = np.sqrt(r2)
 
-    q = r_length / h
+    if r < 1e-5:
+        return np.array([0.0, 0.0])
 
+    q = r / h
     dWdr = 0.0
     if q < 1.0:
         if q <= 0.5:
@@ -62,53 +128,13 @@ def grad_kernel_cubic_spline(xI, xJ, h):
         else:
             dWdr = -CUBIC_SPLINE_01_GRADIENT_FACTOR / h * (1 - q)**2
 
-    # Compute gradient: grad(W) = (dW/dr) * (r / |r|)
-    return (dWdr / r_length) * r
+    return (dWdr / r) * np.array([dx, dy])
 
 
-# another implementation of cubic spline kernel that comes from https://github.com/MmmmHeee/SPH-2D-Taichi/blob/master/src/smooth_kernel.py
-__CUBIC_KERNEL_FACTOR = 10 / (7 * np.pi)
-
-
-def cubic_kernel(xI, xJ, h):
-    # Value of cubic spline smoothing kernel
-    r = np.array(xI) - np.array(xJ)
-    r_len = np.linalg.norm(r)
-
-    half_h = h / 2
-    k = __CUBIC_KERNEL_FACTOR / half_h**2
-    q = r_len / half_h
-
-    res = 0.0
-    if q <= 1.0:
-        q2 = q**2
-        res = k * (1 - 1.5 * q2 + 0.75 * q * q2)
-    elif q < 2.0:
-        res = k * 0.25 * (2 - q)**3
-    return res
-
-
-def cubic_grad_kernel(xI, xJ, h):
-    # Derivative of cubic spline smoothing kernel
-    r = np.array(xI) - np.array(xJ)
-    r_len = np.linalg.norm(r)
-    r_dir = r / r_len if r_len != 0 else r
-
-    half_h = h / 2
-    k = __CUBIC_KERNEL_FACTOR / half_h**2
-    q = r_len / half_h
-
-    res = np.zeros_like(r, dtype=float)
-    if q < 1.0:
-        res = (k / half_h) * (-3. * q + 2.25 * q**2) * r_dir
-    elif q < 2.0:
-        res = -0.75 * (k / half_h) * (2. - q)**2 * r_dir
-    return res
-
-
+# Wrapper functions for compatibility
 def w(xI, xJ, h):
-    return cubic_kernel(xI, xJ, h)
+    return cubic_kernel_numba(xI, xJ, h)
 
 
 def grad_w(xI, xJ, h):
-    return cubic_grad_kernel(xI, xJ, h)
+    return cubic_grad_kernel_numba(xI, xJ, h)
