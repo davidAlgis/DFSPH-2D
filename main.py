@@ -1,6 +1,6 @@
 import argparse
 import numpy as np
-from dfsph.simulator import DFSPHSim
+from dfsph.sim import DFSPHSim
 from dfsph.drawer import SPHDrawer
 from dfsph.particle_init import particles_init
 
