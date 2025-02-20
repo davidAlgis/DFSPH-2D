@@ -3,7 +3,6 @@ import numpy as np
 from dfsph.simulator import DFSPHSim
 from dfsph.drawer import SPHDrawer
 from dfsph.particle_init import particles_init
-from vispy import app
 
 
 def str2bool(v):
@@ -99,13 +98,13 @@ def main():
         # Create the visualization drawer
         drawer = SPHDrawer(num_particles=len(particles))
 
-        # Define an update function that runs one simulation update and feeds new particles to the drawer
-        def update_sim(event):
+        # Define an update function for simulation
+        def update_sim():
             sim.update()
             drawer.set_particles(sim.particles)
 
-        drawer.add_update(args.timestep, update_sim)
-        drawer.launch_update()
+        # Run the visualization loop
+        drawer.run(update_sim)
 
     else:
         print(f"Starting simulation with {len(particles)} particles...")
