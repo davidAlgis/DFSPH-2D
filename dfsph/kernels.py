@@ -64,3 +64,11 @@ def grad_kernel_cubic_spline(xI, xJ, h):
 
     # Compute gradient: grad(W) = (dW/dr) * (r / |r|)
     return (dWdr / r_length) * r
+
+
+def w(xI, xJ, h):
+    kernel_cubic_spline(xI, xJ, h)
+
+
+def grad_w(xI, xJ, h):
+    grad_kernel_cubic_spline(xI, xJ, h)
