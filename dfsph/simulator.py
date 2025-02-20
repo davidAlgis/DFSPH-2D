@@ -13,23 +13,17 @@ class DFSPHSim:
                  grid_size,
                  grid_position,
                  cell_size,
-                 rest_density=1027):
+                 rest_density=1027,
+                 water_viscosity=0.1):
         """
-        Initialize the DFSPH simulation with the given parameters.
-        
-        :param particles: List of Particle instances.
-        :param h: Support radius for SPH.
-        :param dt: Time step.
-        :param grid_size: Grid size (tuple) representing the physical dimensions.
-        :param grid_position: Grid starting position (tuple).
-        :param cell_size: Size of each grid cell.
-        :param rest_density: Rest density of the fluid.
+        Initialize the DFSPH simulation.
         """
         self.particles = particles
         self.num_particles = len(self.particles)
         self.h = h
         self.dt = dt
         self.rest_density = rest_density
+        self.water_viscosity = water_viscosity
         self.mean_density = 0
 
         # Create a grid instance for neighbor search
@@ -37,22 +31,14 @@ class DFSPHSim:
 
         # Physical parameters
         self.gravity = np.array([0, -9.81])  # Gravity force
-        self.viscosity = 0.1  # Example: viscosity coefficient
 
     def _pack_particle_data(self):
         """
-        Pack particle data (positions and masses) into arrays.
-        Also create flattened neighbor index array and arrays for neighbor start indices and counts.
-        
-        Returns:
-            positions: (N,2) array of particle positions.
-            masses: (N,) array of particle masses.
-            neighbor_indices: 1D array of neighbor indices.
-            neighbor_starts: 1D array of starting indices for each particle.
-            neighbor_counts: 1D array of neighbor counts for each particle.
+        Pack particle data (positions, masses, velocities) into arrays.
         """
         N = self.num_particles
         positions = np.empty((N, 2), dtype=np.float64)
+        velocities = np.empty((N, 2), dtype=np.float64)
         masses = np.empty(N, dtype=np.float64)
         neighbor_counts = np.empty(N, dtype=np.int32)
         neighbor_starts = np.empty(N, dtype=np.int32)
@@ -61,25 +47,24 @@ class DFSPHSim:
         neighbor_list = []
         for i, particle in enumerate(self.particles):
             positions[i, :] = particle.position
+            velocities[i, :] = particle.velocity
             masses[i] = particle.mass
             n_neighbors = len(particle.neighbors)
             neighbor_counts[i] = n_neighbors
             neighbor_starts[i] = len(neighbor_list)
             for neighbor in particle.neighbors:
-                neighbor_list.append(neighbor.index)  # Use the particle index
+                neighbor_list.append(neighbor.index)
 
         neighbor_indices = np.array(neighbor_list, dtype=np.int32)
-        return positions, masses, neighbor_indices, neighbor_starts, neighbor_counts
+        return positions, velocities, masses, neighbor_indices, neighbor_starts, neighbor_counts
 
     def compute_density_and_alpha(self):
         """
         Compute the density and alpha coefficient for each particle using Numba.
         """
-        # Pack particle data into arrays
-        positions, masses, neighbor_indices, neighbor_starts, neighbor_counts = self._pack_particle_data(
+        positions, _, masses, neighbor_indices, neighbor_starts, neighbor_counts = self._pack_particle_data(
         )
 
-        # Call the numba-accelerated function
         densities, alphas = dfsph.sph_accelerated.compute_density_alpha_numba(
             positions, masses, neighbor_indices, neighbor_starts,
             neighbor_counts, self.h, self.rest_density)
@@ -91,6 +76,27 @@ class DFSPHSim:
             total_density += densities[i]
 
         self.mean_density = total_density / self.num_particles
+
+    def compute_viscosity_forces(self):
+        """
+        Compute the viscosity forces using Numba.
+        """
+        positions, velocities, masses, neighbor_indices, neighbor_starts, neighbor_counts = self._pack_particle_data(
+        )
+
+        viscosity_forces = dfsph.sph_accelerated.compute_viscosity_forces(
+            positions, velocities, self.get_particle_densities(), masses,
+            neighbor_indices, neighbor_starts, neighbor_counts, self.h,
+            self.water_viscosity)
+
+        for i, particle in enumerate(self.particles):
+            particle.add_force(VISCOSITY, viscosity_forces[i])
+
+    def get_particle_densities(self):
+        """
+        Return an array of densities for the particles.
+        """
+        return np.array([p.density for p in self.particles], dtype=np.float64)
 
     def apply_external_forces(self):
         """
@@ -148,12 +154,14 @@ class DFSPHSim:
         - Applying external forces
         - Integrating velocities and positions
         - Applying boundary penalties
+        Perform a DFSPH update step.
         """
         for particle in self.particles:
             particle.reset_forces()
 
         self.find_neighbors()
         self.compute_density_and_alpha()
+        self.compute_viscosity_forces()
         self.apply_external_forces()
         self.integrate()
         self.apply_boundary_penalty()
