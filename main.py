@@ -25,22 +25,11 @@ def main():
         description="Launch a DFSPH fluid simulation.")
 
     # Simulation parameters
-    parser.add_argument(
-        "-n",
-        "--num_particles",
-        type=int,
-        default=1000,
-        help="Total number of particles in the simulation (default: 1000)")
-    parser.add_argument("-m",
-                        "--mass",
-                        type=float,
-                        default=1.0,
-                        help="Mass of each particle (default: 1.0)")
     parser.add_argument("-r",
                         "--support_radius",
                         type=float,
                         default=0.2742,
-                        help="SPH support radius (default: 1.0)")
+                        help="SPH support radius (default: 0.2742)")
     parser.add_argument("-dt",
                         "--timestep",
                         type=float,
@@ -52,12 +41,32 @@ def main():
                         default=1000,
                         help="Number of simulation steps (default: 1000)")
 
+    # Box parameters for particle initialization
+    parser.add_argument(
+        "--box_origin",
+        type=float,
+        nargs=2,
+        default=[1, 1],
+        help=
+        "Origin of the box where particles are initialized (default: 0.0 0.0)")
+    parser.add_argument(
+        "--box_size",
+        type=float,
+        nargs=2,
+        default=[2, 2],
+        help=
+        "Size of the box where particles are initialized (default: 10.0 10.0)")
+    parser.add_argument("--rest_density",
+                        type=float,
+                        default=1027.0,
+                        help="Rest density of the fluid (default: 1027 kg/m³)")
+
     # Grid parameters
     parser.add_argument(
         "--grid_size",
         type=int,
         nargs=2,
-        default=[10, 10],
+        default=[4, 4],
         help="Size of the grid as (width, height) (default: 50 50)")
     parser.add_argument(
         "--grid_position",
@@ -65,10 +74,6 @@ def main():
         nargs=2,
         default=[0.0, 0.0],
         help="Position of the grid in simulation space (default: 0.0 0.0)")
-    parser.add_argument("--cell_size",
-                        type=float,
-                        default=0.2742,
-                        help="Size of each cell in the grid (default: 1.0)")
 
     # Visualization option
     parser.add_argument(
@@ -76,27 +81,31 @@ def main():
         "--visualize",
         type=str2bool,
         default=True,
-        help="Enable real-time visualization using Vispy (default: enabled).")
+        help="Enable real-time visualization using Pygame (default: enabled).")
 
     # Parse command-line arguments
     args = parser.parse_args()
-    particles = particles_init(args.grid_size,
-                               args.num_particles,
-                               args.mass,
-                               args.support_radius,
-                               spacing=0.1371)
 
+    # Initialize particles
+    particles = particles_init(args.grid_size,
+                               args.support_radius,
+                               args.rest_density,
+                               spacing=args.support_radius / 2,
+                               box_origin=args.box_origin,
+                               box_size=args.box_size)
+    num_particles = len(particles)
+    print(f"Launch simulation DFSPH with {num_particles} particles...")
     # Create the simulation instance
     sim = DFSPHSim(particles,
                    h=args.support_radius,
                    dt=args.timestep,
                    grid_size=tuple(args.grid_size),
                    grid_position=tuple(args.grid_position),
-                   cell_size=args.cell_size)
+                   cell_size=args.support_radius)
 
     if args.visualize:
         # Create the visualization drawer
-        drawer = SPHDrawer(num_particles=len(particles),
+        drawer = SPHDrawer(num_particles=num_particles,
                            grid_size=args.grid_size,
                            grid_position=args.grid_position)
 
