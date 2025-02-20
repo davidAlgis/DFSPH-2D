@@ -26,9 +26,11 @@ class DFSPHSim:
         :param rest_density: Rest density of the fluid.
         """
         self.particles = particles
+        self.num_particles = len(self.particles)
         self.h = h
         self.dt = dt
         self.rest_density = rest_density
+        self.mean_density = 0
 
         # Create a grid instance for neighbor search
         self.grid = Grid(grid_size, grid_position, cell_size)
@@ -42,7 +44,7 @@ class DFSPHSim:
         Compute the density and alpha coefficient for each particle.
         """
         min_density = self.rest_density / 100.0
-
+        mean_density = 0
         for i, particle in enumerate(self.particles):
 
             density_fluid = 0.0
@@ -60,11 +62,12 @@ class DFSPHSim:
 
             # Store density (clamped to avoid division by zero)
             particle.density = max(min_density, density_fluid)
-
+            mean_density += particle.density
             # Compute alpha (avoid division by zero)
             particle.alpha = density_fluid / max(
                 1e-5,
                 np.dot(sum_abs, sum_abs) + abs_sum)
+        self.mean_density = mean_density / self.num_particles
 
     def apply_external_forces(self):
         """

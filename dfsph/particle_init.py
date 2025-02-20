@@ -22,7 +22,9 @@ def particles_init(grid_size, h, rest_density, spacing, box_origin, box_size):
 
     # Compute mass dynamically based on box volume and rest density
     box_volume = box_size[0] * box_size[1]
-    mass = (rest_density * box_volume) / num_particles
+    # we add a magic number here to make sure that the average
+    # density of particles at start is rest density
+    mass = 1.867 * (rest_density * box_volume) / num_particles
 
     return staggered_init(num_particles_x, num_particles_y, mass, h, spacing,
                           box_origin)
