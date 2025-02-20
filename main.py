@@ -101,7 +101,7 @@ def main():
                    dt=args.timestep,
                    grid_size=tuple(args.grid_size),
                    grid_position=tuple(args.grid_position),
-                   cell_size=args.support_radius)
+                   cell_size=2 * args.support_radius)
 
     if args.visualize:
         # Create the visualization drawer
