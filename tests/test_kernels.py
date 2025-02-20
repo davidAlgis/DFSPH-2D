@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from dfsph.kernels import kernel_cubic_spline, grad_kernel_cubic_spline
+from dfsph.kernels import w, grad_w
 
 # We choose constants for the 2D cubic spline kernel as often found in literature.
 # Here we use the form:
@@ -30,8 +30,7 @@ def test_kernel_normalization():
             r = np.sqrt(xi * xi + yi * yi)
             if r < 2 * h:
                 # Evaluate the kernel with xI = [xi, yi] and xJ = [0,0]
-                integral += kernel_cubic_spline(np.array([xi, yi]),
-                                                np.array([0.0, 0.0]), h)
+                integral += w(np.array([xi, yi]), np.array([0.0, 0.0]), h)
     integral *= dx * dx
     expected = 1.0
     # Allow a tolerance of 0.1 for numerical integration
@@ -47,8 +46,8 @@ def test_kernel_positivity():
     for _ in range(100):
         xI = np.random.uniform(-2 * h, 2 * h, 2)
         xJ = np.random.uniform(-2 * h, 2 * h, 2)
-        w = kernel_cubic_spline(xI, xJ, h)
-        assert w >= 0, f"Kernel returned negative value: {w}"
+        wij = w(xI, xJ, h)
+        assert wij >= 0, f"Kernel returned negative value: {wij}"
 
 
 def test_kernel_symmetry():
@@ -60,8 +59,8 @@ def test_kernel_symmetry():
     for _ in range(100):
         xI = np.random.uniform(-h, h, 2)
         xJ = np.random.uniform(-h, h, 2)
-        w1 = kernel_cubic_spline(xI, xJ, h)
-        w2 = kernel_cubic_spline(xJ, xI, h)
+        w1 = w(xI, xJ, h)
+        w2 = w(xJ, xI, h)
         assert abs(w1 - w2) < 1e-5, f"Kernel symmetry failed: {w1} != {w2}"
 
 
@@ -73,8 +72,8 @@ def test_kernel_compact_support():
     # Choose points with distance >= 2h from the origin.
     xI = np.array([3.0 * h, 0.0])
     xJ = np.array([0.0, 0.0])
-    w = kernel_cubic_spline(xI, xJ, h)
-    assert abs(w) < 1e-5, f"Kernel not compact: W({xI}, {xJ}) = {w}"
+    wij = w(xI, xJ, h)
+    assert abs(wij) < 1e-5, f"Kernel not compact: W({xI}, {xJ}) = {wij}"
 
 
 def test_kernel_gradient_analytical_vs_numerical():
@@ -86,7 +85,7 @@ def test_kernel_gradient_analytical_vs_numerical():
     for _ in range(50):
         xI = np.random.uniform(-h, h, 2)
         xJ = np.array([0.0, 0.0])
-        grad_analytical = grad_kernel_cubic_spline(xI, xJ, h)
+        grad_analytical = grad_w(xI, xJ, h)
 
         grad_numerical = np.zeros(2)
         for i in range(2):
@@ -94,8 +93,8 @@ def test_kernel_gradient_analytical_vs_numerical():
             xI_neg = xI.copy()
             xI_pos[i] += epsilon
             xI_neg[i] -= epsilon
-            w_pos = kernel_cubic_spline(xI_pos, xJ, h)
-            w_neg = kernel_cubic_spline(xI_neg, xJ, h)
+            w_pos = w(xI_pos, xJ, h)
+            w_neg = w(xI_neg, xJ, h)
             grad_numerical[i] = (w_pos - w_neg) / (2 * epsilon)
 
         diff = np.linalg.norm(grad_analytical - grad_numerical)
