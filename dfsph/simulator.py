@@ -1,22 +1,24 @@
 import numpy as np
 from dfsph.grid import Grid
-from dfsph.particle import Particle, PRESSURE, VISCOSITY, EXTERNAL, SURFACE_TENSION
+from dfsph.particle import PRESSURE, VISCOSITY, EXTERNAL, SURFACE_TENSION
 
 
 class DFSPHSim:
 
-    def __init__(self, num_particles, h, mass, dt, grid_size, grid_position,
-                 cell_size):
+    def __init__(self, particles, h, dt, grid_size, grid_position, cell_size):
         """
         Initialize the DFSPH simulation with the given parameters.
+        
+        :param particles: List of Particle instances.
+        :param h: Support radius for SPH.
+        :param dt: Time step.
+        :param grid_size: Grid size (tuple).
+        :param grid_position: Grid starting position (tuple).
+        :param cell_size: Size of each grid cell.
         """
-        self.num_particles = num_particles
+        self.particles = particles
         self.h = h
-        self.mass = mass
         self.dt = dt
-
-        # Initialize particles
-        self.particles = self.initialize_particles()
 
         # Create a grid instance for neighbor search
         self.grid = Grid(grid_size, grid_position, cell_size)
@@ -25,19 +27,6 @@ class DFSPHSim:
         self.gravity = np.array([0, -9.81])  # Gravity force
         self.rest_density = 1000.0  # Example: rest density of the fluid
         self.viscosity = 0.1  # Example: viscosity coefficient
-
-    def initialize_particles(self):
-        """
-        Initialize the particle data.
-        Returns a list of Particle instances.
-        """
-        particles = []
-        for _ in range(self.num_particles):
-            position = np.random.rand(
-                2) * 10  # Example: random position in a 10x10 domain
-            velocity = np.zeros(2)
-            particles.append(Particle(position, velocity, self.mass, self.h))
-        return particles
 
     def apply_external_forces(self):
         """
@@ -68,16 +57,19 @@ class DFSPHSim:
             # Apply penalty to X and Y positions separately
             for i in range(2):  # For 2D, apply penalty to x (0) and y (1)
                 if particle.position[i] < self.grid.grid_position[
-                        i]:  # Particle hit the lower bound
+                        i]:  # Lower bound
                     particle.position[
                         i] = self.grid.grid_position[i] + self.h * (
                             self.grid.grid_position[i] - particle.position[i])
                     particle.velocity[
                         i] *= -collider_damping  # Invert velocity with damping
-                elif particle.position[i] > self.grid.grid_end[
-                        i]:  # Particle hit the upper bound
-                    particle.position[i] = self.grid.grid_end[i] - self.h * (
-                        particle.position[i] - self.grid.grid_end[i])
+                elif particle.position[i] > self.grid.grid_position[
+                        i] + self.grid.grid_size[i]:  # Upper bound
+                    particle.position[i] = (
+                        self.grid.grid_position[i] + self.grid.grid_size[i]
+                    ) - self.h * (
+                        particle.position[i] -
+                        (self.grid.grid_position[i] + self.grid.grid_size[i]))
                     particle.velocity[
                         i] *= -collider_damping  # Invert velocity with damping
 
@@ -87,6 +79,7 @@ class DFSPHSim:
         - Resetting forces
         - Applying external forces
         - Integrating velocities and positions
+        - Applying boundary penalties
         """
         # Reset forces before computing them
         for particle in self.particles:

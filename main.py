@@ -2,6 +2,7 @@ import argparse
 import numpy as np
 from dfsph.simulator import DFSPHSim
 from dfsph.drawer import SPHDrawer
+from dfsph.particle_init import particles_init
 from vispy import app
 
 
@@ -16,7 +17,7 @@ def str2bool(v):
     elif v.lower() in ('no', 'false', 'f', 'n', '0'):
         return False
     else:
-        raise ArgumentTypeError('Boolean value expected.')
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
 def main():
@@ -30,7 +31,7 @@ def main():
         "--num_particles",
         type=int,
         default=1000,
-        help="Number of particles in the simulation (default: 1000)")
+        help="Total number of particles in the simulation (default: 1000)")
     parser.add_argument("-m",
                         "--mass",
                         type=float,
@@ -70,7 +71,7 @@ def main():
                         default=1.0,
                         help="Size of each cell in the grid (default: 1.0)")
 
-    # Visualization option (enabled by default; disable with --no-visualize)
+    # Visualization option
     parser.add_argument(
         "-v",
         "--visualize",
@@ -80,19 +81,23 @@ def main():
 
     # Parse command-line arguments
     args = parser.parse_args()
+    particles = particles_init(args.grid_size,
+                               args.num_particles,
+                               args.mass,
+                               args.support_radius,
+                               spacing=1.0)
 
     # Create the simulation instance
-    sim = DFSPHSim(num_particles=args.num_particles,
+    sim = DFSPHSim(particles,
                    h=args.support_radius,
-                   mass=args.mass,
                    dt=args.timestep,
                    grid_size=tuple(args.grid_size),
                    grid_position=tuple(args.grid_position),
                    cell_size=args.cell_size)
 
     if args.visualize:
-        # Create the visualization drawer (decoupled from physics)
-        drawer = SPHDrawer(num_particles=args.num_particles)
+        # Create the visualization drawer
+        drawer = SPHDrawer(num_particles=len(particles))
 
         # Define an update function that runs one simulation update and feeds new particles to the drawer
         def update_sim(event):
@@ -103,7 +108,7 @@ def main():
         drawer.launch_update()
 
     else:
-        print(f"Starting simulation with {args.num_particles} particles...")
+        print(f"Starting simulation with {len(particles)} particles...")
         for i in range(args.steps):
             sim.update()
             if i % 100 == 0:
