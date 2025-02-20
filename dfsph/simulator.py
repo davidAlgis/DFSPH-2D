@@ -43,18 +43,12 @@ class DFSPHSim:
         """
         min_density = self.rest_density / 100.0
 
-        # Update the grid to store particles in their respective cells
-        self.grid.update_grid(self.particles)
-
         for i, particle in enumerate(self.particles):
 
             density_fluid = 0.0
             sum_abs = np.zeros(2)
             abs_sum = 0.0
-
             for neighbor in particle.neighbors:
-                if neighbor == particle:
-                    continue
 
                 wij = w(particle.position, neighbor.position, self.h)
                 grad_wij = grad_w(particle.position, neighbor.position, self.h)
@@ -115,8 +109,11 @@ class DFSPHSim:
                     particle.velocity[i] *= -collider_damping
 
     def find_neighbors(self):
-        for particle in self.particles:
-            particle.neigbors = self.grid.find_neighbors(particle)
+        # Update the grid to store particles in their respective cells
+        self.grid.update_grid(self.particles)
+        for i, particle in enumerate(self.particles):
+            neighbors = self.grid.find_neighbors(particle)
+            particle.neighbors = neighbors
 
     def update(self):
         """
