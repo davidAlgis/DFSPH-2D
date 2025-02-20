@@ -100,16 +100,3 @@ class DFSPHSim:
 
         # Apply boundary penalties (i.e., handle particles hitting the boundary)
         self.apply_boundary_penalty()
-
-    def run(self, num_steps):
-        """
-        Run the simulation for a given number of time steps.
-
-        :param num_steps: Number of simulation steps to run.
-        """
-        for step in range(num_steps):
-            self.update()
-
-            # Optional debug info
-            if step % 100 == 0:
-                print(f"Step {step}/{num_steps} complete.")
