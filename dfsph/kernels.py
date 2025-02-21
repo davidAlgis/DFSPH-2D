@@ -131,10 +131,11 @@ def cubic_grad_kernel_01_numba(xI, xJ, h):
     return (dWdr / r) * np.array([dx, dy])
 
 
-# Wrapper functions for compatibility
+@njit
 def w(xI, xJ, h):
     return cubic_kernel_numba(xI, xJ, h)
 
 
+@njit
 def grad_w(xI, xJ, h):
     return cubic_grad_kernel_numba(xI, xJ, h)
