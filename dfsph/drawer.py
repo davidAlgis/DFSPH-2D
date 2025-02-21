@@ -28,18 +28,18 @@ class SPHDrawer:
         """
         pygame.init()
 
-        # Convert grid_size and grid_position to float arrays.
+        # Convert grid size and position to float arrays.
         self.grid_size = np.array(grid_size, dtype=float)
         self.grid_position = np.array(grid_position, dtype=float)
 
-        # Set screen dimensions based on grid size (maintaining aspect ratio).
+        # Set screen size based on grid size (maintaining aspect ratio).
         aspect_ratio = self.grid_size[0] / self.grid_size[1]
         self.width = width
         self.height = int(width /
                           aspect_ratio) if aspect_ratio >= 1 else height
         self.particle_radius = particle_radius
 
-        # Compute scaling factors for converting world coordinates to screen coordinates.
+        # Compute scaling factors for world-to-screen conversion.
         self.scale_x = self.width / self.grid_size[0]
         self.scale_y = self.height / self.grid_size[1]
 
@@ -58,7 +58,7 @@ class SPHDrawer:
         self.running = False
         self.clock = pygame.time.Clock()
 
-        # Create UI drawer as an attribute.
+        # Create UI drawer.
         self.ui = UIDrawer(self.screen,
                            self.width,
                            self.height,
@@ -69,6 +69,10 @@ class SPHDrawer:
         self.paused = False
         self.step_once = False
 
+        # For highlighting clicked particle.
+        self.highlighted_index = None
+        self.highlighted_neighbors = set()
+
     def set_particles(self, particles):
         """
         Update the particle positions and properties from the simulation.
@@ -76,6 +80,7 @@ class SPHDrawer:
         :param particles: List of Particle instances.
         """
         if len(particles) > 0:
+            # Store additional neighbor indices.
             self.particles = np.array([{
                 'index':
                 p.index,
@@ -84,7 +89,8 @@ class SPHDrawer:
                 p.density,
                 'alpha':
                 p.alpha,
-                'velocity': (p.velocity[0], p.velocity[1])
+                'velocity': (p.velocity[0], p.velocity[1]),
+                'neighbors': [n.index for n in p.neighbors]
             } for p in particles])
 
     def world_to_screen(self, world_pos):
@@ -120,32 +126,36 @@ class SPHDrawer:
         bottom_right = self.world_to_screen(self.grid_position +
                                             self.grid_size)
 
-        # Draw vertical grid lines.
         for i in range(int(self.grid_size[0]) + 1):
             x = top_left[0] + i * self.scale_x
             pygame.draw.line(self.screen, self.grid_color,
                              (x, bottom_right[1]), (x, top_left[1]), 1)
 
-        # Draw horizontal grid lines.
         for j in range(int(self.grid_size[1]) + 1):
             y = bottom_right[1] + j * self.scale_y
             pygame.draw.line(self.screen, self.grid_color, (top_left[0], y),
                              (bottom_right[0], y), 1)
 
-        # Draw border.
         pygame.draw.rect(self.screen, self.border_color,
                          (top_left[0], bottom_right[1], bottom_right[0] -
                           top_left[0], top_left[1] - bottom_right[1]), 2)
 
-    def get_particle_color(self, density):
+    def get_particle_color(self, density, particle_index):
         """
-        Interpolates a color based on the particle's density.
-        - Low density (min_density) → Blue (0, 0, 255)
-        - High density (max_density) → Green (0, 255, 0)
+        Interpolates a color based on the particle's density. Also applies highlighting:
+          - Highlighted particle: Red.
+          - Highlighted neighbor: Yellow.
+        Otherwise, interpolate between blue (low density) and green (high density).
         
         :param density: The density value of the particle.
+        :param particle_index: The unique index of the particle.
         :return: (R, G, B) tuple for color.
         """
+        if self.highlighted_index is not None:
+            if particle_index == self.highlighted_index:
+                return (255, 0, 0)  # Red for the clicked particle.
+            elif particle_index in self.highlighted_neighbors:
+                return (255, 255, 0)  # Yellow for its neighbors.
         min_d, max_d = self.density_range
         normalized = np.clip((density - min_d) / (max_d - min_d), 0, 1)
         r = 0
@@ -157,50 +167,51 @@ class SPHDrawer:
         """
         Efficiently draws all particles onto the screen with colors based on density.
         """
-        self.screen.fill(self.bg_color)  # Clear screen
-
-        # Draw grid.
+        self.screen.fill(self.bg_color)
         self.draw_grid()
 
-        # Draw each particle.
         for particle in self.particles:
             screen_x, screen_y = self.world_to_screen(particle['pos'])
-            color = self.get_particle_color(particle['density'])
+            color = self.get_particle_color(particle['density'],
+                                            particle['index'])
             pygame.draw.circle(self.screen, color, (screen_x, screen_y),
                                self.particle_radius)
 
-        # Draw UI buttons.
         self.ui.draw_buttons()
-
         pygame.display.flip()
 
     def handle_click(self, mouse_pos):
         """
-        Handle mouse click events. First check if a control button was clicked.
-        Otherwise, check for particle clicks and print its info.
+        Handle mouse click events. First check if a control button was clicked;
+        otherwise, check for particle clicks.
         
         :param mouse_pos: (x, y) tuple from the mouse event.
         """
-        button = self.ui.handle_click(mouse_pos)
-        if button == "play":
-            self.paused = False
-            self.step_once = False
-            return
-        elif button == "pause":
-            self.paused = True
-            self.step_once = False
-            return
-        elif button == "step":
-            self.step_once = True
-            self.paused = True
+        ui_action = self.ui.handle_click(mouse_pos)
+        if ui_action is not None:
+            if ui_action == "play":
+                self.paused = False
+                self.step_once = False
+                print("Simulation resumed (Play).")
+            elif ui_action == "pause":
+                self.paused = True
+                self.step_once = False
+                print("Simulation paused (Pause).")
+            elif ui_action == "step":
+                self.step_once = True
+                self.paused = True
+                print("Simulation stepped (Step).")
             return
 
-        # Check for particle clicks.
+        # If click is not on a button, check for particle selection.
         world_click = self.screen_to_world(mouse_pos)
         threshold = self.particle_radius / min(self.scale_x, self.scale_y)
+        clicked_index = None
         for particle in self.particles:
             pos = np.array(particle['pos'])
-            if np.linalg.norm(pos - world_click) <= threshold:
+            distance = np.linalg.norm(pos - world_click)
+            if distance <= threshold:
+                clicked_index = particle['index']
                 print("Particle clicked:")
                 print(f"  Index: {particle['index']}")
                 print(f"  Position: {particle['pos']}")
@@ -208,6 +219,20 @@ class SPHDrawer:
                 print(f"  Alpha: {particle['alpha']}")
                 print(f"  Velocity: {particle['velocity']}")
                 break
+
+        # Update highlighted particle and its neighbors.
+        if clicked_index is not None:
+            self.highlighted_index = clicked_index
+            # Find the corresponding particle in our array and set its neighbors.
+            for particle in self.particles:
+                if particle['index'] == clicked_index:
+                    self.highlighted_neighbors = set(
+                        particle.get('neighbors', []))
+                    break
+        else:
+            # Clear highlighting if click not on any particle.
+            self.highlighted_index = None
+            self.highlighted_neighbors = set()
 
     def run(self, update_func, timestep=0.05):
         """
@@ -218,7 +243,6 @@ class SPHDrawer:
         """
         self.running = True
 
-        # Start the simulation loop in a separate thread.
         sim_thread = threading.Thread(target=self.simulation_loop,
                                       args=(update_func, ),
                                       daemon=True)
