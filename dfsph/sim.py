@@ -21,7 +21,7 @@ class DFSPHSim:
         self.particles = particles
         self.num_particles = len(self.particles)
         self.h = h
-        self.dt = dt
+        self.dt = dt  # Initial dt; will be adapted dynamically.
         self.rest_density = rest_density
         self.water_viscosity = water_viscosity
         self.mean_density = 0
@@ -32,31 +32,74 @@ class DFSPHSim:
         # Physical parameters
         self.gravity = np.array([0, -9.81])  # Gravity force
 
-    def _pack_particle_data(self):
+        # Buffers for preallocation (will be allocated in preallocate_buffers())
+        self.positions_buf = None
+        self.velocities_buf = None
+        self.masses_buf = None
+        self.neighbor_counts_buf = None
+        self.neighbor_starts_buf = None
+        self.neighbor_indices_buf = None
+
+        self.preallocate_buffers()
+
+    def preallocate_buffers(self):
         """
-        Pack particle data (positions, masses, velocities) into arrays.
+        Preallocate arrays for particle data to minimize dynamic allocations.
+        Assumes an estimated maximum of 20 neighbors per particle.
         """
         N = self.num_particles
-        positions = np.empty((N, 2), dtype=np.float64)
-        velocities = np.empty((N, 2), dtype=np.float64)
-        masses = np.empty(N, dtype=np.float64)
-        neighbor_counts = np.empty(N, dtype=np.int32)
-        neighbor_starts = np.empty(N, dtype=np.int32)
+        nbr_neighbor_max = 200
+        self.positions_buf = np.empty((N, 2), dtype=np.float64)
+        self.velocities_buf = np.empty((N, 2), dtype=np.float64)
+        self.masses_buf = np.empty(N, dtype=np.float64)
+        self.neighbor_counts_buf = np.empty(N, dtype=np.int32)
+        self.neighbor_starts_buf = np.empty(N, dtype=np.int32)
+        # Estimate maximum neighbor indices buffer size (adjust as needed)
+        self.neighbor_indices_buf = np.empty(nbr_neighbor_max * N,
+                                             dtype=np.int32)
 
-        # Collect neighbor indices
-        neighbor_list = []
+    def _pack_particle_data(self):
+        """
+        Pack particle data into preallocated arrays.
+        Reuses buffers allocated in preallocate_buffers() to avoid per-step allocations.
+        Returns:
+            positions: (N,2) array of particle positions.
+            velocities: (N,2) array of particle velocities.
+            masses: (N,) array of particle masses.
+            neighbor_indices: 1D array of neighbor indices (sized to actual count).
+            neighbor_starts: (N,) array indicating start indices in neighbor_indices for each particle.
+            neighbor_counts: (N,) array with the number of neighbors for each particle.
+        """
+        N = self.num_particles
+        pos = self.positions_buf
+        vel = self.velocities_buf
+        mass = self.masses_buf
+        n_counts = self.neighbor_counts_buf
+        n_starts = self.neighbor_starts_buf
+        neighbor_list = self.neighbor_indices_buf
+
+        index_ptr = 0
         for i, particle in enumerate(self.particles):
-            positions[i, :] = particle.position
-            velocities[i, :] = particle.velocity
-            masses[i] = particle.mass
+            pos[i, :] = particle.position
+            vel[i, :] = particle.velocity
+            mass[i] = particle.mass
             n_neighbors = len(particle.neighbors)
-            neighbor_counts[i] = n_neighbors
-            neighbor_starts[i] = len(neighbor_list)
-            for neighbor in particle.neighbors:
-                neighbor_list.append(neighbor.index)
+            n_counts[i] = n_neighbors
+            n_starts[i] = index_ptr
 
-        neighbor_indices = np.array(neighbor_list, dtype=np.int32)
-        return positions, velocities, masses, neighbor_indices, neighbor_starts, neighbor_counts
+            # Fill the neighbor indices for particle i
+            for neighbor in particle.neighbors:
+                if index_ptr < neighbor_list.shape[0]:
+                    neighbor_list[index_ptr] = neighbor.index
+                else:
+                    # Optionally, reallocate a larger buffer here.
+                    raise ValueError(
+                        "Exceeded preallocated neighbor indices buffer size")
+                index_ptr += 1
+
+        # Return only the used portion of the neighbor indices array.
+        neighbor_indices = neighbor_list[:index_ptr].copy()
+        return pos, vel, mass, neighbor_indices, n_starts, n_counts
 
     def compute_density_and_alpha(self):
         """
@@ -171,17 +214,42 @@ class DFSPHSim:
         for particle in self.particles:
             particle.neighbors = self.grid.find_neighbors(particle)
 
+    def adapt_dt_for_cfl(self):
+        """
+        Adapt the time step (dt) dynamically based on the CFL condition.
+        Uses:
+            dt = 0.3999 * h / velocity_max
+        and clamps dt between 0.0001 and 0.002.
+        """
+        velocity_max = 0.0
+        for particle in self.particles:
+            vel_norm = np.sqrt(particle.velocity[0]**2 +
+                               particle.velocity[1]**2)
+            if vel_norm > velocity_max:
+                velocity_max = vel_norm
+
+        if velocity_max < 1e-6:
+            new_dt = 0.002
+        else:
+            new_dt = 0.3999 * self.h / velocity_max
+
+        self.dt = max(0.0001, min(new_dt, 0.002))
+
     def update(self):
         """
-        Perform a DFSPH update step, including:
-        - Resetting forces
-        - Finding neighbors
-        - Computing density and alpha using Numba
-        - Applying external forces
-        - Integrating velocities and positions
-        - Applying boundary penalties
-        Perform a DFSPH update step.
+        Perform a DFSPH update step:
+            - Adapt dt based on CFL condition.
+            - Reset forces.
+            - Find neighbors.
+            - Compute density, alpha, and pressure.
+            - Compute pressure and viscosity forces.
+            - Apply external forces.
+            - Integrate velocities and positions.
+            - Enforce boundary conditions.
         """
+        # Adapt dt dynamically based on current particle velocities.
+        self.adapt_dt_for_cfl()
+
         for particle in self.particles:
             particle.reset_forces()
 
