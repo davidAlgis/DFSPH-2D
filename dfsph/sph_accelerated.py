@@ -1,5 +1,5 @@
 import numpy as np
-from dfsph.kernels import cubic_kernel_numba, cubic_grad_kernel_numba
+from dfsph.kernels import w, grad_w
 from numba import njit, prange
 
 
@@ -27,8 +27,8 @@ def compute_density_alpha_numba(positions, masses, neighbor_indices,
             j = neighbor_indices[start + k]
 
             # Compute kernel and gradient using Numba-accelerated functions
-            wij = cubic_kernel_numba(positions[i], positions[j], h)
-            grad_wij = cubic_grad_kernel_numba(positions[i], positions[j], h)
+            wij = w(positions[i], positions[j], h)
+            grad_wij = grad_w(positions[i], positions[j], h)
 
             density_fluid += masses[j] * wij
 
@@ -66,7 +66,7 @@ def compute_viscosity_forces(positions, velocities, densities, masses,
             j = neighbor_indices[start + k]
 
             # Compute distance and kernel gradient
-            grad_wij = cubic_grad_kernel_numba(positions[i], positions[j], h)
+            grad_wij = grad_w(positions[i], positions[j], h)
             r_ij = positions[i] - positions[j]
             r_len_sq = r_ij[0]**2 + r_ij[1]**2
             if r_len_sq < 1e-8:
