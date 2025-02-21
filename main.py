@@ -95,20 +95,22 @@ def main():
                                box_size=args.box_size)
     num_particles = len(particles)
     print(f"Launch simulation DFSPH with {num_particles} particles...")
+    cell_size = 2 * args.support_radius
     # Create the simulation instance
     sim = DFSPHSim(particles,
                    h=args.support_radius,
                    dt=args.timestep,
                    grid_size=tuple(args.grid_size),
                    grid_position=tuple(args.grid_position),
-                   cell_size=2 * args.support_radius)
+                   cell_size=cell_size)
 
     if args.visualize:
         # Create the visualization drawer
         drawer = SPHDrawer(num_particles=num_particles,
                            grid_size=args.grid_size,
                            grid_position=args.grid_position,
-                           support_radius=args.support_radius)
+                           support_radius=args.support_radius,
+                           cell_size=cell_size)
 
         # Define an update function for simulation
         def update_sim():

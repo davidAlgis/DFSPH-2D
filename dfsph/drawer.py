@@ -7,16 +7,16 @@ from dfsph.drawer_ui import UIDrawer
 
 class SPHDrawer:
 
-    def __init__(
-        self,
-        num_particles,
-        grid_size,
-        grid_position,
-        support_radius,  # New parameter: support radius (h)
-        width=600,
-        height=600,
-        particle_radius=3,
-        density_range=(500, 1500)):
+    def __init__(self,
+                 num_particles,
+                 grid_size,
+                 grid_position,
+                 support_radius,
+                 cell_size,
+                 width=600,
+                 height=600,
+                 particle_radius=3,
+                 density_range=(500, 1500)):
         """
         Initialize the Pygame visualization for SPH particles.
         
@@ -34,6 +34,7 @@ class SPHDrawer:
         # Convert grid size and position to float arrays.
         self.grid_size = np.array(grid_size, dtype=float)
         self.grid_position = np.array(grid_position, dtype=float)
+        self.cell_size = cell_size
         self.h = support_radius  # Store the support radius
 
         # Set screen size based on grid size (maintaining aspect ratio).
@@ -123,22 +124,49 @@ class SPHDrawer:
 
     def draw_grid(self):
         """
-        Draw the simulation grid with horizontal and vertical lines.
+        Draw the simulation grid with horizontal and vertical lines based on self.cell_size.
         """
+        # Compute the number of cells along each axis.
+        # Here we assume that grid_size represents the physical dimensions.
+        # Instead of iterating over int(grid_size), we iterate in steps of self.cell_size.
+        num_cells_x = int(np.floor(
+            self.grid_size[0] /
+            self.ui.button_size))  # this might be adapted to your simulation,
+        # but here we assume that cell size is provided externally (use self.ui if desired)
+        # For a more generic solution, you can store cell_size as an attribute.
+        # For now, we assume cell_size is set in the Grid and also used in simulation,
+        # but we want to use that to determine line positions:
+        cell_size = self.ui.button_size / self.scale_x  # Not ideal; instead, assume we want lines every self.cell_size world units.
+        cell_size = self.cell_size if hasattr(
+            self, 'cell_size') else self.h  # fallback
+
+        num_cells_x = int(np.floor(self.grid_size[0] / cell_size))
+        num_cells_y = int(np.floor(self.grid_size[1] / cell_size))
+
         top_left = self.world_to_screen(self.grid_position)
+        # Compute bottom-right using grid_position + grid_size.
         bottom_right = self.world_to_screen(self.grid_position +
                                             self.grid_size)
 
-        for i in range(int(self.grid_size[0]) + 1):
-            x = top_left[0] + i * self.scale_x
+        # Draw vertical lines at intervals of cell_size.
+        for i in range(num_cells_x + 1):
+            world_x = self.grid_position[0] + i * cell_size
+            screen_x, _ = self.world_to_screen(
+                (world_x, self.grid_position[1]))
             pygame.draw.line(self.screen, self.grid_color,
-                             (x, bottom_right[1]), (x, top_left[1]), 1)
+                             (screen_x, bottom_right[1]),
+                             (screen_x, top_left[1]), 1)
 
-        for j in range(int(self.grid_size[1]) + 1):
-            y = bottom_right[1] + j * self.scale_y
-            pygame.draw.line(self.screen, self.grid_color, (top_left[0], y),
-                             (bottom_right[0], y), 1)
+        # Draw horizontal lines.
+        for j in range(num_cells_y + 1):
+            world_y = self.grid_position[1] + j * cell_size
+            _, screen_y = self.world_to_screen(
+                (self.grid_position[0], world_y))
+            pygame.draw.line(self.screen, self.grid_color,
+                             (top_left[0], screen_y),
+                             (bottom_right[0], screen_y), 1)
 
+        # Draw border.
         pygame.draw.rect(self.screen, self.border_color,
                          (top_left[0], bottom_right[1], bottom_right[0] -
                           top_left[0], top_left[1] - bottom_right[1]), 2)
