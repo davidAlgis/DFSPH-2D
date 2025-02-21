@@ -65,7 +65,7 @@ def compute_viscosity_forces(positions, velocities, densities, masses,
         for k in range(count):
             j = neighbor_indices[start + k]
 
-            # Compute distance and kernel gradient
+            # Compute kernel gradient
             grad_wij = grad_w(positions[i], positions[j], h)
             r_ij = positions[i] - positions[j]
             r_len_sq = r_ij[0]**2 + r_ij[1]**2
@@ -85,7 +85,33 @@ def compute_viscosity_forces(positions, velocities, densities, masses,
                                 density_i) * water_viscosity * masses[j] * (
                                     v_dot_x / denom) * grad_wij
 
-        # Store computed force
         viscosity_forces[i] = viscosity_factor * viscosity_force
 
     return viscosity_forces
+
+
+# -----------------------------------------------------------------------------
+# Compute pressure forces using Numba
+@njit(parallel=True)
+def compute_pressure_forces_wcsph(positions, pressures, densities, masses,
+                                  neighbor_indices, neighbor_starts,
+                                  neighbor_counts, h):
+    n = positions.shape[0]
+    pressure_forces = np.zeros((n, 2), dtype=np.float64)
+
+    for i in prange(n):
+        force = np.zeros(2, dtype=np.float64)
+        start = neighbor_starts[i]
+        count = neighbor_counts[i]
+        for k in range(count):
+            j = neighbor_indices[start + k]
+            grad = grad_w(positions[i], positions[j], h)
+            # Sum the contribution from the neighbor using the SPH pressure force formulation.
+            term = (pressures[i] / (densities[i] * densities[i]) +
+                    pressures[j] / (densities[j] * densities[j]))
+            force += masses[j] * term * grad
+        # Pressure force is the negative gradient of pressure.
+        pressure_forces[i, 0] = -force[0]
+        pressure_forces[i, 1] = -force[1]
+
+    return pressure_forces

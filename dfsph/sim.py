@@ -77,6 +77,34 @@ class DFSPHSim:
 
         self.mean_density = total_density / self.num_particles
 
+    def compute_pressure(self, B=1000.0, gamma=7):
+        """
+        Compute the pressure for each particle using Tait's equation:
+            p = B * ((density / rest_density)**gamma - 1)
+        """
+        for particle in self.particles:
+            particle.pressure = B * (
+                (particle.density / self.rest_density)**gamma - 1)
+
+    def compute_pressure_forces_wcsph(self):
+        """
+        Compute the pressure forces using Numba acceleration.
+        Pressure force formulation:
+            F_pressure = - sum_j m_j * (p_i/(rho_i^2) + p_j/(rho_j^2)) * gradW_ij
+        """
+        positions, velocities, masses, neighbor_indices, neighbor_starts, neighbor_counts = self._pack_particle_data(
+        )
+        pressures = np.array([p.pressure for p in self.particles],
+                             dtype=np.float64)
+        densities = self.get_particle_densities()
+
+        pressure_forces = dfsph.sph_accelerated.compute_pressure_forces_wcsph(
+            positions, pressures, densities, masses, neighbor_indices,
+            neighbor_starts, neighbor_counts, self.h)
+
+        for i, particle in enumerate(self.particles):
+            particle.add_force(PRESSURE, pressure_forces[i])
+
     def compute_viscosity_forces(self):
         """
         Compute the viscosity forces using Numba.
@@ -100,7 +128,7 @@ class DFSPHSim:
 
     def predict_intermediate_velocity(self):
         """
-        Apply external forces (like gravity) to all particles.
+        Apply external forces (e.g., gravity) to update particle velocities.
         """
         for particle in self.particles:
             particle.add_force(EXTERNAL, particle.mass * self.gravity)
@@ -117,12 +145,10 @@ class DFSPHSim:
 
     def apply_boundary_penalty(self, collider_damping=0.5):
         """
-        Apply penalty to particles when they hit the boundary of the grid.
-        
-        :param collider_damping: Damping factor for boundary interaction.
+        Apply penalty forces when particles hit the simulation boundaries.
         """
         for particle in self.particles:
-            for i in range(2):  # For 2D, apply penalty to x (0) and y (1)
+            for i in range(2):  # For 2D: x (0) and y (1)
                 if particle.position[i] < self.grid.grid_position[i]:
                     particle.position[
                         i] = self.grid.grid_position[i] + self.h * (
@@ -161,6 +187,8 @@ class DFSPHSim:
 
         self.find_neighbors()
         self.compute_density_and_alpha()
+        self.compute_pressure()
+        self.compute_pressure_forces_wcsph()
         self.compute_viscosity_forces()
         self.predict_intermediate_velocity()
         self.integrate()
