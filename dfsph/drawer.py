@@ -7,20 +7,23 @@ from dfsph.drawer_ui import UIDrawer
 
 class SPHDrawer:
 
-    def __init__(self,
-                 num_particles,
-                 grid_size,
-                 grid_position,
-                 width=600,
-                 height=600,
-                 particle_radius=3,
-                 density_range=(500, 1500)):
+    def __init__(
+        self,
+        num_particles,
+        grid_size,
+        grid_position,
+        support_radius,  # New parameter: support radius (h)
+        width=600,
+        height=600,
+        particle_radius=3,
+        density_range=(500, 1500)):
         """
         Initialize the Pygame visualization for SPH particles.
         
         :param num_particles: Maximum number of particles to display.
         :param grid_size: Tuple (grid_width, grid_height) defining the physical simulation area.
         :param grid_position: Tuple (grid_x, grid_y) defining the lower-left corner of the grid.
+        :param support_radius: The SPH support radius (h).
         :param width: Width of the window.
         :param height: Height of the window.
         :param particle_radius: Radius of the particles in pixels.
@@ -31,6 +34,7 @@ class SPHDrawer:
         # Convert grid size and position to float arrays.
         self.grid_size = np.array(grid_size, dtype=float)
         self.grid_position = np.array(grid_position, dtype=float)
+        self.h = support_radius  # Store the support radius
 
         # Set screen size based on grid size (maintaining aspect ratio).
         aspect_ratio = self.grid_size[0] / self.grid_size[1]
@@ -80,7 +84,6 @@ class SPHDrawer:
         :param particles: List of Particle instances.
         """
         if len(particles) > 0:
-            # Store additional neighbor indices.
             self.particles = np.array([{
                 'index':
                 p.index,
@@ -140,12 +143,18 @@ class SPHDrawer:
                          (top_left[0], bottom_right[1], bottom_right[0] -
                           top_left[0], top_left[1] - bottom_right[1]), 2)
 
+    def draw_buttons(self):
+        """
+        Draw the control buttons using the UI drawer.
+        """
+        self.ui.draw_buttons()
+
     def get_particle_color(self, density, particle_index):
         """
-        Interpolates a color based on the particle's density. Also applies highlighting:
-          - Highlighted particle: Red.
-          - Highlighted neighbor: Yellow.
-        Otherwise, interpolate between blue (low density) and green (high density).
+        Interpolates a color based on the particle's density and applies highlighting:
+          - Selected particle: Red.
+          - Neighbors of the selected: Yellow.
+          - Otherwise, interpolate from Blue (low density) to Green (high density).
         
         :param density: The density value of the particle.
         :param particle_index: The unique index of the particle.
@@ -153,7 +162,7 @@ class SPHDrawer:
         """
         if self.highlighted_index is not None:
             if particle_index == self.highlighted_index:
-                return (255, 0, 0)  # Red for the clicked particle.
+                return (255, 0, 0)  # Red for selected particle.
             elif particle_index in self.highlighted_neighbors:
                 return (255, 255, 0)  # Yellow for its neighbors.
         min_d, max_d = self.density_range
@@ -165,7 +174,8 @@ class SPHDrawer:
 
     def draw_particles(self):
         """
-        Efficiently draws all particles onto the screen with colors based on density.
+        Draw all particles onto the screen with colors based on density.
+        Also draws a circle of radius 2h around the selected particle.
         """
         self.screen.fill(self.bg_color)
         self.draw_grid()
@@ -177,13 +187,25 @@ class SPHDrawer:
             pygame.draw.circle(self.screen, color, (screen_x, screen_y),
                                self.particle_radius)
 
-        self.ui.draw_buttons()
+        # If a particle is selected, draw a circle of radius 2h around it.
+        if self.highlighted_index is not None and self.h is not None:
+            for particle in self.particles:
+                if particle['index'] == self.highlighted_index:
+                    center = self.world_to_screen(particle['pos'])
+                    # Convert 2h (world units) to screen units using the average scale.
+                    scale = min(self.scale_x, self.scale_y)
+                    circle_radius = int(2 * self.h * scale)
+                    pygame.draw.circle(self.screen, (255, 255, 255), center,
+                                       circle_radius, 2)
+                    break
+
+        self.draw_buttons()
         pygame.display.flip()
 
     def handle_click(self, mouse_pos):
         """
-        Handle mouse click events. First check if a control button was clicked;
-        otherwise, check for particle clicks.
+        Handle mouse click events. First check if a control button was clicked.
+        Otherwise, check for particle clicks.
         
         :param mouse_pos: (x, y) tuple from the mouse event.
         """
@@ -203,14 +225,13 @@ class SPHDrawer:
                 print("Simulation stepped (Step).")
             return
 
-        # If click is not on a button, check for particle selection.
+        # Check for particle clicks.
         world_click = self.screen_to_world(mouse_pos)
         threshold = self.particle_radius / min(self.scale_x, self.scale_y)
         clicked_index = None
         for particle in self.particles:
             pos = np.array(particle['pos'])
-            distance = np.linalg.norm(pos - world_click)
-            if distance <= threshold:
+            if np.linalg.norm(pos - world_click) <= threshold:
                 clicked_index = particle['index']
                 print("Particle clicked:")
                 print(f"  Index: {particle['index']}")
@@ -220,17 +241,14 @@ class SPHDrawer:
                 print(f"  Velocity: {particle['velocity']}")
                 break
 
-        # Update highlighted particle and its neighbors.
         if clicked_index is not None:
             self.highlighted_index = clicked_index
-            # Find the corresponding particle in our array and set its neighbors.
             for particle in self.particles:
                 if particle['index'] == clicked_index:
                     self.highlighted_neighbors = set(
                         particle.get('neighbors', []))
                     break
         else:
-            # Clear highlighting if click not on any particle.
             self.highlighted_index = None
             self.highlighted_neighbors = set()
 

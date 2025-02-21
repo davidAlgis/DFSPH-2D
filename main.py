@@ -107,7 +107,8 @@ def main():
         # Create the visualization drawer
         drawer = SPHDrawer(num_particles=num_particles,
                            grid_size=args.grid_size,
-                           grid_position=args.grid_position)
+                           grid_position=args.grid_position,
+                           support_radius=args.support_radius)
 
         # Define an update function for simulation
         def update_sim():
