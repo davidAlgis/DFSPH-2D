@@ -95,7 +95,7 @@ def main():
                                box_size=args.box_size)
     num_particles = len(particles)
     print(f"Launch simulation DFSPH with {num_particles} particles...")
-    cell_size = 2 * args.support_radius
+    cell_size = args.support_radius
     # Create the simulation instance
     sim = DFSPHSim(particles,
                    h=args.support_radius,

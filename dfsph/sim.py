@@ -229,11 +229,11 @@ class DFSPHSim:
                 velocity_max = vel_norm
 
         if velocity_max < 1e-6:
-            new_dt = 0.002
+            new_dt = 0.033
         else:
             new_dt = 0.3999 * self.h / velocity_max
 
-        self.dt = max(0.0001, min(new_dt, 0.002))
+        self.dt = max(0.0001, min(new_dt, 0.033))
 
     def update(self):
         """
