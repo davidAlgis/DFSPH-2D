@@ -2,6 +2,7 @@ import numpy as np
 from dfsph.grid import Grid
 from dfsph.particle import PRESSURE, VISCOSITY, EXTERNAL, SURFACE_TENSION
 import dfsph.sph_accelerated
+from dfsph.kernels import w  # SPH kernel function
 
 
 class DFSPHSim:
@@ -25,6 +26,7 @@ class DFSPHSim:
         self.rest_density = rest_density
         self.water_viscosity = water_viscosity
         self.mean_density = 0
+        self.gamma_mass_solid = 1.4
 
         # Create a grid instance for neighbor search
         self.grid = Grid(grid_origin, grid_size, cell_size)
@@ -45,7 +47,7 @@ class DFSPHSim:
     def preallocate_buffers(self):
         """
         Preallocate arrays for particle data to minimize dynamic allocations.
-        Assumes an estimated maximum of 20 neighbors per particle.
+        Assumes an estimated maximum of (N/5) neighbors per particle.
         """
         N = self.num_particles
         nbr_neighbor_max = int(N / 5)
@@ -54,7 +56,6 @@ class DFSPHSim:
         self.masses_buf = np.empty(N, dtype=np.float64)
         self.neighbor_counts_buf = np.empty(N, dtype=np.int32)
         self.neighbor_starts_buf = np.empty(N, dtype=np.int32)
-        # Estimate maximum neighbor indices buffer size (adjust as needed)
         self.neighbor_indices_buf = np.empty(nbr_neighbor_max * N,
                                              dtype=np.int32)
 
@@ -87,17 +88,14 @@ class DFSPHSim:
             n_counts[i] = n_neighbors
             n_starts[i] = index_ptr
 
-            # Fill the neighbor indices for particle i
             for neighbor in particle.neighbors:
                 if index_ptr < neighbor_list.shape[0]:
                     neighbor_list[index_ptr] = neighbor.index
                 else:
-                    # Optionally, reallocate a larger buffer here.
                     raise ValueError(
                         "Exceeded preallocated neighbor indices buffer size")
                 index_ptr += 1
 
-        # Return only the used portion of the neighbor indices array.
         neighbor_indices = neighbor_list[:index_ptr].copy()
         return pos, vel, mass, neighbor_indices, n_starts, n_counts
 
@@ -169,42 +167,66 @@ class DFSPHSim:
         """
         return np.array([p.density for p in self.particles], dtype=np.float64)
 
+    def update_mass_solid(self):
+        """
+        Update the mass of solid particles based on their neighboring solid particles.
+        For each solid particle, compute:
+            massSolid = sum( w(p_i, p_j, h) ) for each neighbor j (only if j is solid and j != i)
+            Then set: particle.mass = rest_density * gamma / massSolid
+        """
+        for particle in self.particles:
+            if particle.type_particle == "solid":
+                massSolid = 0.0
+                for neighbor in particle.neighbors:
+                    # Only consider neighboring solid particles
+                    if neighbor.index != particle.index and neighbor.type_particle == "solid":
+                        massSolid += w(particle.position, neighbor.position,
+                                       self.h)
+                if massSolid > 1e-8:
+                    particle.mass = self.rest_density * self.gamma_mass_solid / massSolid
+
     def predict_intermediate_velocity(self):
         """
         Apply external forces (e.g., gravity) to update particle velocities.
+        Only fluid particles are updated; solid particles remain static.
         """
         for particle in self.particles:
-            particle.add_force(EXTERNAL, particle.mass * self.gravity)
-            total_force = particle.total_force()
-            acceleration = total_force / particle.mass
-            particle.velocity += acceleration * self.dt
+            if particle.type_particle == "fluid":
+                particle.add_force(EXTERNAL, particle.mass * self.gravity)
+                total_force = particle.total_force()
+                acceleration = total_force / particle.mass
+                particle.velocity += acceleration * self.dt
 
     def integrate(self):
         """
         Integrate particle velocities and positions using Euler integration.
+        Only fluid particles are integrated; solid particles remain static.
         """
         for particle in self.particles:
-            particle.position += particle.velocity * self.dt
+            if particle.type_particle == "fluid":
+                particle.position += particle.velocity * self.dt
 
     def apply_boundary_penalty(self, collider_damping=0.5):
         """
-        Apply penalty forces when particles hit the simulation boundaries.
+        Apply penalty forces when fluid particles hit the simulation boundaries.
+        Solid particles are not moved.
         """
         for particle in self.particles:
-            for i in range(2):  # For 2D: x (0) and y (1)
-                if particle.position[i] < self.grid.grid_origin[i] + 1e-2:
-                    particle.position[
-                        i] = self.grid.grid_origin[i] + self.h * (
-                            self.grid.grid_origin[i] - particle.position[i])
-                    particle.velocity[i] *= -collider_damping
-                elif particle.position[i] > self.grid.grid_origin[
-                        i] + self.grid.grid_size[i] - 1e-2:
-                    particle.position[i] = (
-                        self.grid.grid_origin[i] + self.grid.grid_size[i]
-                    ) - self.h * (
-                        particle.position[i] -
-                        (self.grid.grid_origin[i] + self.grid.grid_size[i]))
-                    particle.velocity[i] *= -collider_damping
+            if particle.type_particle == "fluid":
+                for i in range(2):  # For 2D: x (0) and y (1)
+                    if particle.position[i] < self.grid.grid_origin[i] + 1e-2:
+                        particle.position[i] = self.grid.grid_origin[
+                            i] + self.h * (self.grid.grid_origin[i] -
+                                           particle.position[i])
+                        particle.velocity[i] *= -collider_damping
+                    elif particle.position[i] > self.grid.grid_origin[
+                            i] + self.grid.grid_size[i] - 1e-2:
+                        particle.position[i] = (
+                            self.grid.grid_origin[i] + self.grid.grid_size[i]
+                        ) - self.h * (particle.position[i] -
+                                      (self.grid.grid_origin[i] +
+                                       self.grid.grid_size[i]))
+                        particle.velocity[i] *= -collider_damping
 
     def find_neighbors(self):
         """
@@ -219,7 +241,7 @@ class DFSPHSim:
         Adapt the time step (dt) dynamically based on the CFL condition.
         Uses:
             dt = 0.3999 * h / velocity_max
-        and clamps dt between 0.0001 and 0.002.
+        and clamps dt between 0.0001 and 0.033.
         """
         velocity_max = 0.0
         for particle in self.particles:
@@ -241,19 +263,22 @@ class DFSPHSim:
             - Adapt dt based on CFL condition.
             - Reset forces.
             - Find neighbors.
+            - (For solid particles, update mass.)
             - Compute density, alpha, and pressure.
             - Compute pressure and viscosity forces.
             - Apply external forces.
             - Integrate velocities and positions.
             - Enforce boundary conditions.
         """
-        # Adapt dt dynamically based on current particle velocities.
         self.adapt_dt_for_cfl()
 
         for particle in self.particles:
             particle.reset_forces()
 
         self.find_neighbors()
+
+        self.update_mass_solid()
+
         self.compute_density_and_alpha()
         self.compute_pressure()
         self.compute_pressure_forces_wcsph()

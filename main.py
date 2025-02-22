@@ -46,14 +46,14 @@ def main():
         "--box_origin",
         type=float,
         nargs=2,
-        default=[1, 1],
+        default=[0.5, 0.5],
         help=
         "Origin of the box where particles are initialized (default: 0.0 0.0)")
     parser.add_argument(
         "--box_size",
         type=float,
         nargs=2,
-        default=[2, 2],
+        default=[7, 7],
         help=
         "Size of the box where particles are initialized (default: 10.0 10.0)")
     parser.add_argument("--rest_density",
@@ -87,14 +87,11 @@ def main():
     args = parser.parse_args()
 
     # Initialize particles
-    particles = particles_init(args.grid_size,
-                               args.support_radius,
-                               args.rest_density,
-                               spacing=args.support_radius / 2,
     particles = particles_init(grid_origin=args.grid_origin,
                                grid_size=args.grid_size,
                                h=args.support_radius,
                                rest_density=args.rest_density,
+                               spacing=args.support_radius / 2.5,
                                box_origin=args.box_origin,
                                box_size=args.box_size)
     num_particles = len(particles)
