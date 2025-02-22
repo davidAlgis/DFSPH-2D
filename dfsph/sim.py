@@ -2,7 +2,7 @@ import numpy as np
 from dfsph.grid import Grid
 from dfsph.particle import PRESSURE, VISCOSITY, EXTERNAL, SURFACE_TENSION
 import dfsph.sph_accelerated
-from dfsph.kernels import w  # SPH kernel function
+from dfsph.kernels import w, grad_w  # SPH kernel and its gradient
 
 
 class DFSPHSim:
@@ -26,6 +26,7 @@ class DFSPHSim:
         self.rest_density = rest_density
         self.water_viscosity = water_viscosity
         self.mean_density = 0
+        # Gamma used in solid mass update
         self.gamma_mass_solid = 1.4
 
         # Create a grid instance for neighbor search
@@ -34,7 +35,7 @@ class DFSPHSim:
         # Physical parameters
         self.gravity = np.array([0, -9.81])  # Gravity force
 
-        # Buffers for preallocation (will be allocated in preallocate_buffers())
+        # Buffers for preallocation (allocated in preallocate_buffers())
         self.positions_buf = None
         self.velocities_buf = None
         self.masses_buf = None
@@ -43,6 +44,8 @@ class DFSPHSim:
         self.neighbor_indices_buf = None
 
         self.preallocate_buffers()
+        # For solid neighbors we may wish to use a specific viscosity coefficient.
+        self.viscosity_coefficient_solid = 1.0
 
     def preallocate_buffers(self):
         """
@@ -87,7 +90,6 @@ class DFSPHSim:
             n_neighbors = len(particle.neighbors)
             n_counts[i] = n_neighbors
             n_starts[i] = index_ptr
-
             for neighbor in particle.neighbors:
                 if index_ptr < neighbor_list.shape[0]:
                     neighbor_list[index_ptr] = neighbor.index
@@ -95,7 +97,6 @@ class DFSPHSim:
                     raise ValueError(
                         "Exceeded preallocated neighbor indices buffer size")
                 index_ptr += 1
-
         neighbor_indices = neighbor_list[:index_ptr].copy()
         return pos, vel, mass, neighbor_indices, n_starts, n_counts
 
@@ -105,17 +106,14 @@ class DFSPHSim:
         """
         positions, _, masses, neighbor_indices, neighbor_starts, neighbor_counts = self._pack_particle_data(
         )
-
         densities, alphas = dfsph.sph_accelerated.compute_density_alpha_numba(
             positions, masses, neighbor_indices, neighbor_starts,
             neighbor_counts, self.h, self.rest_density)
-
         total_density = 0.0
         for i, particle in enumerate(self.particles):
             particle.density = densities[i]
             particle.alpha = alphas[i]
             total_density += densities[i]
-
         self.mean_density = total_density / self.num_particles
 
     def compute_pressure(self, B=1000.0, gamma=7):
@@ -127,63 +125,94 @@ class DFSPHSim:
             particle.pressure = B * (
                 (particle.density / self.rest_density)**gamma - 1)
 
-    def compute_pressure_forces_wcsph(self):
-        """
-        Compute the pressure forces using Numba acceleration.
-        Pressure force formulation:
-            F_pressure = - sum_j m_j * (p_i/(rho_i^2) + p_j/(rho_j^2)) * gradW_ij
-        """
-        positions, velocities, masses, neighbor_indices, neighbor_starts, neighbor_counts = self._pack_particle_data(
-        )
-        pressures = np.array([p.pressure for p in self.particles],
-                             dtype=np.float64)
-        densities = self.get_particle_densities()
-
-        pressure_forces = dfsph.sph_accelerated.compute_pressure_forces_wcsph(
-            positions, pressures, densities, masses, neighbor_indices,
-            neighbor_starts, neighbor_counts, self.h)
-
-        for i, particle in enumerate(self.particles):
-            particle.add_force(PRESSURE, pressure_forces[i])
-
-    def compute_viscosity_forces(self):
-        """
-        Compute the viscosity forces using Numba.
-        """
-        positions, velocities, masses, neighbor_indices, neighbor_starts, neighbor_counts = self._pack_particle_data(
-        )
-
-        viscosity_forces = dfsph.sph_accelerated.compute_viscosity_forces(
-            positions, velocities, self.get_particle_densities(), masses,
-            neighbor_indices, neighbor_starts, neighbor_counts, self.h,
-            self.water_viscosity)
-
-        for i, particle in enumerate(self.particles):
-            particle.add_force(VISCOSITY, viscosity_forces[i])
-
-    def get_particle_densities(self):
-        """
-        Return an array of densities for the particles.
-        """
-        return np.array([p.density for p in self.particles], dtype=np.float64)
-
     def update_mass_solid(self):
         """
         Update the mass of solid particles based on their neighboring solid particles.
         For each solid particle, compute:
             massSolid = sum( w(p_i, p_j, h) ) for each neighbor j (only if j is solid and j != i)
-            Then set: particle.mass = rest_density * gamma / massSolid
+            Then set: particle.mass = rest_density * gamma_mass_solid / massSolid
         """
         for particle in self.particles:
             if particle.type_particle == "solid":
                 massSolid = 0.0
                 for neighbor in particle.neighbors:
-                    # Only consider neighboring solid particles
                     if neighbor.index != particle.index and neighbor.type_particle == "solid":
                         massSolid += w(particle.position, neighbor.position,
                                        self.h)
                 if massSolid > 1e-8:
                     particle.mass = self.rest_density * self.gamma_mass_solid / massSolid
+
+    def compute_viscosity_forces_updated(self):
+        """
+        Compute viscosity forces on fluid particles, taking into account both fluid and solid neighbors.
+        For each fluid particle:
+          - If neighbor is fluid:
+              viscosity contribution = (mass/density_i) * waterViscosity * mass * (v_dot_r/denom) * grad_wij
+              where denom = ||r_ij||^2 + 0.01 * h^2 * density_neighbor.
+          - If neighbor is solid:
+              viscosity contribution = (mass/density_i) * viscosity_coefficient_solid * (neighbor.mass) * (v_dot_r/denom) * grad_wij
+              where denom = ||r_ij||^2 + 0.01 * h^2 * density_i.
+        Finally, the total viscosity force is multiplied by 10.0.
+        """
+        for particle in self.particles:
+            if particle.type_particle != "fluid":
+                continue
+            viscosity_force = np.zeros(2, dtype=np.float64)
+            for neighbor in particle.neighbors:
+                if neighbor.index == particle.index:
+                    continue
+                r_ij = particle.position - neighbor.position
+                r2 = r_ij[0]**2 + r_ij[1]**2
+                if r2 > self.h**2:
+                    continue  # Outside kernel support.
+                v_ij = particle.velocity - neighbor.velocity
+                v_dot_r = v_ij[0] * r_ij[0] + v_ij[1] * r_ij[1]
+                if neighbor.type_particle == "fluid":
+                    denom = r2 + 0.01 * self.h**2 * neighbor.density
+                    grad = grad_w(particle.position, neighbor.position, self.h)
+                    contribution = (
+                        particle.mass / particle.density
+                    ) * self.water_viscosity * particle.mass * (v_dot_r /
+                                                                denom) * grad
+                    viscosity_force += contribution
+                elif neighbor.type_particle == "solid":
+                    # Use a separate viscosity coefficient for solids.
+                    coeff = self.viscosity_coefficient_solid
+                    denom = r2 + 0.01 * self.h**2 * particle.density
+                    grad = grad_w(particle.position, neighbor.position, self.h)
+                    contribution = (particle.mass / particle.density
+                                    ) * coeff * neighbor.mass * (v_dot_r /
+                                                                 denom) * grad
+                    viscosity_force += contribution
+            particle.add_force(VISCOSITY, 10.0 * viscosity_force)
+
+    def compute_pressure_forces_updated(self):
+        """
+        Compute pressure forces on fluid particles, taking into account both fluid and solid neighbors.
+        For each fluid particle:
+          - If neighbor is fluid:
+              pressure contribution = - mass * mass * pressure_neighbor / (density_i * density_neighbor) * grad_wij.
+          - If neighbor is solid:
+              pressure contribution = - mass * neighbor.mass * (pressure_i / density_i^2) * grad_wij.
+        """
+        for particle in self.particles:
+            if particle.type_particle != "fluid":
+                continue
+            pressure_force = np.zeros(2, dtype=np.float64)
+            density_i = particle.density
+            density_i_sq = density_i * density_i
+            pressure_i = particle.pressure
+            for neighbor in particle.neighbors:
+                if neighbor.index == particle.index:
+                    continue
+                grad = grad_w(particle.position, neighbor.position, self.h)
+                if neighbor.type_particle == "fluid":
+                    pressure_force += -particle.mass * particle.mass * neighbor.pressure / (
+                        density_i * neighbor.density) * grad
+                elif neighbor.type_particle == "solid":
+                    pressure_force += -particle.mass * neighbor.mass * (
+                        pressure_i / density_i_sq) * grad
+            particle.add_force(PRESSURE, pressure_force)
 
     def predict_intermediate_velocity(self):
         """
@@ -249,12 +278,10 @@ class DFSPHSim:
                                particle.velocity[1]**2)
             if vel_norm > velocity_max:
                 velocity_max = vel_norm
-
         if velocity_max < 1e-6:
             new_dt = 0.033
         else:
             new_dt = 0.3999 * self.h / velocity_max
-
         self.dt = max(0.0001, min(new_dt, 0.033))
 
     def update(self):
@@ -263,9 +290,9 @@ class DFSPHSim:
             - Adapt dt based on CFL condition.
             - Reset forces.
             - Find neighbors.
-            - (For solid particles, update mass.)
+            - Update mass for solid particles.
             - Compute density, alpha, and pressure.
-            - Compute pressure and viscosity forces.
+            - Compute viscosity and pressure forces (including solid contributions).
             - Apply external forces.
             - Integrate velocities and positions.
             - Enforce boundary conditions.
@@ -276,13 +303,11 @@ class DFSPHSim:
             particle.reset_forces()
 
         self.find_neighbors()
-
         self.update_mass_solid()
-
         self.compute_density_and_alpha()
         self.compute_pressure()
-        self.compute_pressure_forces_wcsph()
-        self.compute_viscosity_forces()
+        self.compute_viscosity_forces_updated()
+        self.compute_pressure_forces_updated()
         self.predict_intermediate_velocity()
         self.integrate()
-        self.apply_boundary_penalty()
+        # self.apply_boundary_penalty()
