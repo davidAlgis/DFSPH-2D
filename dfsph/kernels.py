@@ -82,6 +82,10 @@ def cubic_grad_kernel_numba(xI, xJ, h):
 def cubic_kernel_01_numba(xI, xJ, h):
     """
     Computes the cubic spline kernel (0-1 variant) in 2D.
+    Based on the kernel presented in:
+    Dan Koschier, Jan Bender, Barbara Solenthaler, & Teschner, M. (2019). 
+    Smoothed Particle Hydrodynamics Techniques for the Physics Based Simulation of Fluids and Solids. 
+    Eurographics Tutorial 2019.
 
     :param xI: Position of particle I
     :param xJ: Position of particle J
@@ -132,10 +136,91 @@ def cubic_grad_kernel_01_numba(xI, xJ, h):
 
 
 @njit
+def m4_numba(xI, xJ, h):
+    """
+    Computes the additional kernel value in 2D:
+    
+        W(x, h) = 1/h^2 * 
+            { (15/(14π))*[(2 - q)^3 - 4*(1 - q)^3],  for 0 <= q <= 1,
+              (15/(14π))*(2 - q)^3,                  for 1 <= q <= 2,
+              0,                                    for q > 2 }
+              
+    where q = |xI - xJ| / h.
+    
+    :param xI: Position of particle I (NumPy array)
+    :param xJ: Position of particle J (NumPy array)
+    :param h: Smoothing length
+    :return: Kernel value W
+    """
+    dx = xI[0] - xJ[0]
+    dy = xI[1] - xJ[1]
+    r2 = dx * dx + dy * dy
+    r = np.sqrt(r2)
+    q = r / h
+    A = 40.0 / (h**2 * 7 * np.pi)
+
+    if q > 1:
+        return 0.0
+    elif q > 0.5:
+        return A * (2 * (1 - q)**3)
+    else:
+        return A * (6 * (q**3 - q**2) + 1)
+
+
+@njit
+def grad_m4_numba(xI, xJ, h):
+    """
+    Computes the gradient of the M4 kernel in 2D.
+    
+    The gradient is given by:
+        ∇W(x, h) = (dW/dr) * ( (xI - xJ) / r ),
+        
+    where
+        dW/dr = (1/h) * (dW/dq)  and q = r/h.
+    
+    For 0 <= q <= 0.5:
+        dW/dq = A*(18*q^2 - 12*q),
+    For 0.5 < q <= 1:
+        dW/dq = -6*A*(1 - q)^2,
+    and for q > 1, the gradient is zero.
+    
+    :param xI: Position of particle I (NumPy array)
+    :param xJ: Position of particle J (NumPy array)
+    :param h: Smoothing length
+    :return: Gradient of the kernel as a NumPy array.
+    """
+    dx = xI[0] - xJ[0]
+    dy = xI[1] - xJ[1]
+    r2 = dx * dx + dy * dy
+    r = np.sqrt(r2)
+
+    # Avoid division by zero:
+    if r < 1e-5:
+        return np.array([0.0, 0.0])
+
+    q = r / h
+    A = 40.0 / (7 * np.pi * h**2)
+    dW_dq = 0.0
+
+    if q > 1:
+        dW_dq = 0.0
+    elif q > 0.5:
+        dW_dq = -6.0 * A * (1 - q)**2
+    else:
+        dW_dq = A * (18.0 * q**2 - 12.0 * q)
+
+    # Chain rule: dW/dr = dW/dq * (1/h)
+    dW_dr = dW_dq / h
+
+    # Return gradient: dW/dr * ( (xI - xJ)/r )
+    return dW_dr * np.array([dx, dy]) / r
+
+
+@njit
 def w(xI, xJ, h):
-    return cubic_kernel_numba(xI, xJ, h)
+    return m4_numba(xI, xJ, h)
 
 
 @njit
 def grad_w(xI, xJ, h):
-    return cubic_grad_kernel_numba(xI, xJ, h)
+    return grad_m4_numba(xI, xJ, h)
