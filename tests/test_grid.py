@@ -6,11 +6,11 @@ from dfsph.particle import Particle
 def test_grid():
     # Define the grid parameters
     grid_size = (5, 5)  # 5x5 grid
-    grid_position = (0.0, 0.0)  # Grid starts at (0.0, 0.0)
+    grid_origin = (0.0, 0.0)  # Grid starts at (0.0, 0.0)
     cell_size = 1.0  # Each cell is 1x1 unit
 
     # Initialize the grid
-    grid = Grid(grid_size, grid_position, cell_size)
+    grid = Grid(grid_origin, grid_size, cell_size)
 
     # Define some particles with positions
     particles = [

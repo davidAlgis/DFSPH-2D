@@ -66,10 +66,10 @@ def main():
         "--grid_size",
         type=int,
         nargs=2,
-        default=[4, 4],
+        default=[8, 8],
         help="Size of the grid as (width, height) (default: 50 50)")
     parser.add_argument(
-        "--grid_position",
+        "--grid_origin",
         type=float,
         nargs=2,
         default=[0.0, 0.0],
@@ -91,6 +91,10 @@ def main():
                                args.support_radius,
                                args.rest_density,
                                spacing=args.support_radius / 2,
+    particles = particles_init(grid_origin=args.grid_origin,
+                               grid_size=args.grid_size,
+                               h=args.support_radius,
+                               rest_density=args.rest_density,
                                box_origin=args.box_origin,
                                box_size=args.box_size)
     num_particles = len(particles)
@@ -100,15 +104,15 @@ def main():
     sim = DFSPHSim(particles,
                    h=args.support_radius,
                    dt=args.timestep,
+                   grid_origin=tuple(args.grid_origin),
                    grid_size=tuple(args.grid_size),
-                   grid_position=tuple(args.grid_position),
                    cell_size=cell_size)
 
     if args.visualize:
         # Create the visualization drawer
         drawer = SPHDrawer(num_particles=num_particles,
+                           grid_origin=args.grid_origin,
                            grid_size=args.grid_size,
-                           grid_position=args.grid_position,
                            support_radius=args.support_radius,
                            cell_size=cell_size)
 

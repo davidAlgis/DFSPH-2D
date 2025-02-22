@@ -10,8 +10,8 @@ class DFSPHSim:
                  particles,
                  h,
                  dt,
+                 grid_origin,
                  grid_size,
-                 grid_position,
                  cell_size,
                  rest_density=1027,
                  water_viscosity=0.1):
@@ -27,7 +27,7 @@ class DFSPHSim:
         self.mean_density = 0
 
         # Create a grid instance for neighbor search
-        self.grid = Grid(grid_size, grid_position, cell_size)
+        self.grid = Grid(grid_origin, grid_size, cell_size)
 
         # Physical parameters
         self.gravity = np.array([0, -9.81])  # Gravity force
@@ -48,7 +48,7 @@ class DFSPHSim:
         Assumes an estimated maximum of 20 neighbors per particle.
         """
         N = self.num_particles
-        nbr_neighbor_max = 200
+        nbr_neighbor_max = int(N / 5)
         self.positions_buf = np.empty((N, 2), dtype=np.float64)
         self.velocities_buf = np.empty((N, 2), dtype=np.float64)
         self.masses_buf = np.empty(N, dtype=np.float64)
@@ -192,18 +192,18 @@ class DFSPHSim:
         """
         for particle in self.particles:
             for i in range(2):  # For 2D: x (0) and y (1)
-                if particle.position[i] < self.grid.grid_position[i]:
+                if particle.position[i] < self.grid.grid_origin[i] + 1e-2:
                     particle.position[
-                        i] = self.grid.grid_position[i] + self.h * (
-                            self.grid.grid_position[i] - particle.position[i])
+                        i] = self.grid.grid_origin[i] + self.h * (
+                            self.grid.grid_origin[i] - particle.position[i])
                     particle.velocity[i] *= -collider_damping
-                elif particle.position[i] > self.grid.grid_position[
-                        i] + self.grid.grid_size[i]:
+                elif particle.position[i] > self.grid.grid_origin[
+                        i] + self.grid.grid_size[i] - 1e-2:
                     particle.position[i] = (
-                        self.grid.grid_position[i] + self.grid.grid_size[i]
+                        self.grid.grid_origin[i] + self.grid.grid_size[i]
                     ) - self.h * (
                         particle.position[i] -
-                        (self.grid.grid_position[i] + self.grid.grid_size[i]))
+                        (self.grid.grid_origin[i] + self.grid.grid_size[i]))
                     particle.velocity[i] *= -collider_damping
 
     def find_neighbors(self):

@@ -9,20 +9,28 @@ SURFACE_TENSION = "surface_tension"
 
 class Particle:
 
-    def __init__(self, index, position, velocity, mass, h):
+    def __init__(self,
+                 index,
+                 position,
+                 velocity,
+                 mass,
+                 h,
+                 type_particle="fluid"):
         """
         Initialize a Particle object with its properties.
 
-        :param position: Initial position as a 2D vector (list, tuple, or numpy array).
-        :param velocity: Initial velocity as a 2D vector (list, tuple, or numpy array).
+        :param position: Initial position as a 2D vector.
+        :param velocity: Initial velocity as a 2D vector.
         :param mass: Mass of the particle.
         :param h: Support radius used in SPH calculations.
+        :param type_particle: Either "fluid" or "solid".
         """
         self.index = index
         self.position = np.array(position, dtype=float)
         self.velocity = np.array(velocity, dtype=float)
         self.mass = mass
         self.h = h
+        self.type_particle = type_particle  # "fluid" or "solid"
 
         # SPH-related properties
         self.density = 0.0
@@ -62,23 +70,21 @@ class Particle:
 
     def total_force(self):
         """
-        Compute the total force acting on the particle by summing all forces.
-
+        Compute the total force acting on the particle.
         :return: A 2D vector representing the total accumulated force.
         """
         return sum(self.forces.values(), np.zeros(2, dtype=float))
 
     def set_neighbors(self, neighbors):
         """
-        Store the list of neighboring particles for the current simulation step.
-
+        Store the list of neighboring particles.
         :param neighbors: List of neighboring Particle instances.
         """
         self.neighbors = neighbors
 
     def debug_forces(self):
         """
-        Print all forces applied to the particle for debugging purposes.
+        Print all forces applied to the particle for debugging.
         """
         print("Forces acting on the particle:")
         for force_id, force_value in self.forces.items():

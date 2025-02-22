@@ -10,8 +10,8 @@ class SPHDrawer:
 
     def __init__(self,
                  num_particles,
+                 grid_origin,
                  grid_size,
-                 grid_position,
                  support_radius,
                  cell_size,
                  width=600,
@@ -23,7 +23,7 @@ class SPHDrawer:
         
         :param num_particles: Maximum number of particles to display.
         :param grid_size: Tuple (grid_width, grid_height) defining the physical simulation area.
-        :param grid_position: Tuple (grid_x, grid_y) defining the lower-left corner of the grid.
+        :param grid_origin: Tuple (grid_x, grid_y) defining the lower-left corner of the grid.
         :param support_radius: The SPH support radius (h).
         :param width: Width of the window.
         :param height: Height of the window.
@@ -34,7 +34,7 @@ class SPHDrawer:
 
         # Convert grid size and position to float arrays.
         self.grid_size = np.array(grid_size, dtype=float)
-        self.grid_position = np.array(grid_position, dtype=float)
+        self.grid_origin = np.array(grid_origin, dtype=float)
         self.cell_size = cell_size
         self.h = support_radius  # store the support radius
 
@@ -87,30 +87,36 @@ class SPHDrawer:
         :param particles: List of Particle instances.
         """
         if len(particles) > 0:
-            self.particles = np.array([{
-                'index':
-                p.index,
-                'pos': (p.position[0], p.position[1]),
-                'density':
-                p.density,
-                'alpha':
-                p.alpha,
-                'velocity': (p.velocity[0], p.velocity[1]),
-                'neighbors': [n.index for n in p.neighbors]
-            } for p in particles])
+            self.particles = np.array([
+                {
+                    'index': p.index,
+                    'pos': (p.position[0], p.position[1]),
+                    'density': p.density,
+                    'alpha': p.alpha,
+                    'velocity': (p.velocity[0], p.velocity[1]),
+                    'neighbors': [n.index for n in p.neighbors],
+                    'type': p.
+                    type_particle  # Added particle type (e.g., "fluid" or "solid")
+                } for p in particles
+            ])
 
     def world_to_screen(self, world_pos):
         """
         Convert simulation world coordinates to screen space.
+        If world_pos contains NaN values, return a default coordinate.
         
         :param world_pos: 2D tuple or array of (x, y) world position.
         :return: (x, y) screen coordinates.
         """
+        # Check if world_pos contains NaN values.
+        if np.isnan(world_pos[0]) or np.isnan(world_pos[1]):
+            return (-100, -100)
+
         screen_x = int(
-            round((world_pos[0] - self.grid_position[0]) * self.scale_x))
+            round((world_pos[0] - self.grid_origin[0]) * self.scale_x))
         screen_y = int(
-            round((self.grid_size[1] -
-                   (world_pos[1] - self.grid_position[1])) * self.scale_y))
+            round((self.grid_size[1] - (world_pos[1] - self.grid_origin[1])) *
+                  self.scale_y))
         return screen_x, screen_y
 
     def screen_to_world(self, screen_pos):
@@ -121,9 +127,8 @@ class SPHDrawer:
         :return: 2D numpy array of (x, y) world coordinates.
         """
         x, y = screen_pos
-        world_x = x / self.scale_x + self.grid_position[0]
-        world_y = self.grid_position[1] + self.grid_size[1] - (y /
-                                                               self.scale_y)
+        world_x = x / self.scale_x + self.grid_origin[0]
+        world_y = self.grid_origin[1] + self.grid_size[1] - (y / self.scale_y)
         return np.array([world_x, world_y])
 
     def draw_grid(self):
@@ -131,35 +136,29 @@ class SPHDrawer:
         Draw the simulation grid with horizontal and vertical lines.
         The grid lines are drawn every self.cell_size world units.
         """
-        # Here, assume that you want grid lines every cell_size (which can be set externally).
-        # For example, you could set self.cell_size = 2 * self.h in your main script.
-
         num_cells_x = int(np.floor(self.grid_size[0] / self.cell_size))
         num_cells_y = int(np.floor(self.grid_size[1] / self.cell_size))
 
-        top_left = self.world_to_screen(self.grid_position)
-        bottom_right = self.world_to_screen(self.grid_position +
-                                            self.grid_size)
+        top_left = self.world_to_screen(self.grid_origin)
+        bottom_right = self.world_to_screen(self.grid_origin + self.grid_size)
 
         # Draw vertical lines.
         for i in range(num_cells_x + 1):
-            world_x = self.grid_position[0] + i * self.cell_size
-            screen_x, _ = self.world_to_screen(
-                (world_x, self.grid_position[1]))
+            world_x = self.grid_origin[0] + i * self.cell_size
+            screen_x, _ = self.world_to_screen((world_x, self.grid_origin[1]))
             pygame.draw.line(self.screen, self.grid_color,
                              (screen_x, bottom_right[1]),
                              (screen_x, top_left[1]), 1)
 
         # Draw horizontal lines.
         for j in range(num_cells_y + 1):
-            world_y = self.grid_position[1] + j * self.cell_size
-            _, screen_y = self.world_to_screen(
-                (self.grid_position[0], world_y))
+            world_y = self.grid_origin[1] + j * self.cell_size
+            _, screen_y = self.world_to_screen((self.grid_origin[0], world_y))
             pygame.draw.line(self.screen, self.grid_color,
                              (top_left[0], screen_y),
                              (bottom_right[0], screen_y), 1)
 
-        # Draw border.
+        # Draw border in brown.
         pygame.draw.rect(self.screen, self.border_color,
                          (top_left[0], bottom_right[1], bottom_right[0] -
                           top_left[0], top_left[1] - bottom_right[1]), 2)
@@ -172,41 +171,23 @@ class SPHDrawer:
 
     def get_particle_color(self, density, particle_index, pos):
         """
-        Interpolates a color based on the particle's density and its distance (via the kernel value)
+        Interpolates a color based on the particle's density and its distance
         to the selected particle.
         
         - The selected particle is rendered in red.
-        - For neighbor particles, we compute the kernel value w between the selected particle's
-          position and the current particle's position. When w is high (i.e. the neighbor is very
-          close), the color is red; when w is low, the color transitions to a yellow-white shade.
-        - Otherwise, the color is interpolated between blue (low density) and green (high density).
+        - For neighbor particles, the color transitions from red (close)
+          to yellow-white (farther).
+        - Otherwise, fluid particles are interpolated between blue (low density)
+          and green (high density).
         
         :param density: The density value of the particle.
         :param particle_index: Unique particle index.
         :param pos: The particle's position (world coordinates, as a tuple or list).
         :return: (R, G, B) tuple for the particle's color.
         """
-        # If a particle is highlighted, adjust color based on its distance to the selected particle.
-        if self.highlighted_index is not None:
-            if particle_index == self.highlighted_index:
-                return (255, 0, 0)  # Selected particle in red.
-            elif particle_index in self.highlighted_neighbors and self.selected_particle_pos is not None:
-                # Convert positions to numpy arrays.
-                selected_pos = np.array(self.selected_particle_pos,
-                                        dtype=float)
-                current_pos = np.array(pos, dtype=float)
-                w_val = w(selected_pos, current_pos, self.h)
-                w_max = w(selected_pos, selected_pos, self.h)
-                norm = w_val / w_max if w_max != 0 else 0
-                # Interpolate between red and yellow-white:
-                #   - Close neighbors (norm ~ 1) -> red (255,0,0)
-                #   - Farther neighbors (norm ~ 0) -> yellow-white (255,255,200)
-                low_color = np.array([255, 255, 200], dtype=float)
-                high_color = np.array([255, 0, 0], dtype=float)
-                color = low_color * (1 - norm) + high_color * norm
-                return (int(color[0]), int(color[1]), int(color[2]))
-
-        # Fallback: Interpolate between blue (low density) and green (high density).
+        # Check if the particle is a boundary (solid) particle.
+        # Note: In draw_particles(), we already check for type, so this fallback is for fluid.
+        # Interpolate fluid color if not highlighted.
         min_d, max_d = self.density_range
         normalized = np.clip((density - min_d) / (max_d - min_d), 0, 1)
         r = 0
@@ -222,10 +203,16 @@ class SPHDrawer:
         self.screen.fill(self.bg_color)
         self.draw_grid()
 
+        # Draw particles.
         for particle in self.particles:
             screen_x, screen_y = self.world_to_screen(particle['pos'])
-            color = self.get_particle_color(particle['density'],
-                                            particle['index'], particle['pos'])
+            # If the particle is solid, color it brown.
+            if particle.get('type', 'fluid') == 'solid':
+                color = (150, 75, 0)
+            else:
+                color = self.get_particle_color(particle['density'],
+                                                particle['index'],
+                                                particle['pos'])
             pygame.draw.circle(self.screen, color, (screen_x, screen_y),
                                self.particle_radius)
 

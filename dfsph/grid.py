@@ -4,17 +4,17 @@ from dfsph.particle import Particle  # Import the Particle class
 
 class Grid:
 
-    def __init__(self, grid_size, grid_position, cell_size):
+    def __init__(self, grid_origin, grid_size, cell_size):
         """
         Initialize the grid with the given parameters.
 
         :param grid_size: Physical dimensions of the grid (width, height).
-        :param grid_position: Position of the grid in the simulation space.
+        :param grid_origin: Position of the grid in the simulation space.
         :param cell_size: Size of each cell in the grid.
         """
         self.grid_size = np.array(grid_size, dtype=float)  # Width & height
-        self.grid_position = np.array(grid_position, dtype=float)
-        self.grid_end = self.grid_position + self.grid_size
+        self.grid_origin = np.array(grid_origin, dtype=float)
+        self.grid_end = self.grid_origin + self.grid_size
         self.cell_size = cell_size
 
         # Compute the number of cells per dimension
@@ -78,7 +78,7 @@ class Grid:
         """
         return tuple(
             np.floor(
-                (position - self.grid_position) / self.cell_size).astype(int))
+                (position - self.grid_origin) / self.cell_size).astype(int))
 
     def is_within_bounds(self, cell_index):
         """
