@@ -33,7 +33,7 @@ def particles_init(grid_origin, grid_size, h, rest_density, spacing,
     # Boundary particles (solid static) along the grid boundary.
     boundary_particles = add_boundary_particles(len(fluid_particles),
                                                 grid_origin, grid_size,
-                                                spacing, mass, h)
+                                                spacing / 4, mass, h)
 
     # Combine fluid and boundary particles.
     all_particles = fluid_particles + boundary_particles
@@ -98,12 +98,12 @@ def add_boundary_particles(count, box_origin, box_size, spacing, mass, h):
 
     x0, y0 = box_origin
     width, height = box_size
-    # x0 += h / 2
-    # y0 += h / 2
+    x0 += h / 2
+    y0 += h / 2
     x1 = x0 + width
     y1 = y0 + height
-    # x1 -= h
-    # y1 -= h
+    x1 -= h
+    y1 -= h
 
     # Bottom boundary (excluding corners if needed)
     x_positions = np.arange(x0, x1 + spacing, spacing)
