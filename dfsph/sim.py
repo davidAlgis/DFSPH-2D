@@ -28,6 +28,8 @@ class DFSPHSim:
         self.mean_density = 0
         # Gamma used in solid mass update
         self.gamma_mass_solid = 1.4
+        # Viscosity coefficient for interactions with solids
+        self.viscosity_coefficient_solid = 1.0
 
         # Create a grid instance for neighbor search
         self.grid = Grid(grid_origin, grid_size, cell_size)
@@ -44,8 +46,6 @@ class DFSPHSim:
         self.neighbor_indices_buf = None
 
         self.preallocate_buffers()
-        # For solid neighbors we may wish to use a specific viscosity coefficient.
-        self.viscosity_coefficient_solid = 1.0
 
     def preallocate_buffers(self):
         """
@@ -120,6 +120,7 @@ class DFSPHSim:
         """
         Compute the pressure for each particle using Tait's equation:
             p = B * ((density / rest_density)**gamma - 1)
+        (Not used when the constant density solver is active.)
         """
         for particle in self.particles:
             particle.pressure = B * (
@@ -142,17 +143,94 @@ class DFSPHSim:
                 if massSolid > 1e-8:
                     particle.mass = self.rest_density * self.gamma_mass_solid / massSolid
 
+    # --- Constant Density Pressure Solver Methods ---
+
+    def update_density_intermediate(self, dt_sph):
+        """
+        For each fluid particle, compute an intermediate density value.
+        The correction is based on velocity differences with neighbors.
+        Fluid neighbors contribute with the particle mass; solid neighbors contribute with their mass.
+        The intermediate density is stored in particle.density_intermediate.
+        """
+        for particle in self.particles:
+            if particle.type_particle != "fluid":
+                continue
+            density_corr_fluid = 0.0
+            density_corr_solid = 0.0
+            for neighbor in particle.neighbors:
+                grad = grad_w(particle.position, neighbor.position, self.h)
+                v_diff = particle.velocity - neighbor.velocity
+                dot_val = v_diff[0] * grad[0] + v_diff[1] * grad[1]
+                if neighbor.type_particle == "fluid":
+                    density_corr_fluid += dot_val
+                elif neighbor.type_particle == "solid":
+                    density_corr_solid += neighbor.mass * dot_val
+            density_adv = particle.density + dt_sph * (
+                particle.mass * density_corr_fluid + density_corr_solid)
+            particle.density_intermediate = max(density_adv, self.rest_density)
+
+    def adapt_velocity_density(self, dt_sph):
+        """
+        For each fluid particle, compute a velocity correction based on the density error.
+        Compute kappa = (density_intermediate - rest_density) * alpha / (dt_sph^2)
+        Then for each neighbor, accumulate a correction term:
+          - Fluid neighbor: add rest_density * (kappa_i/rho_i + kappa_j/rho_j) * grad_w
+          - Solid neighbor: add 2.0 * neighbor.mass * (kappa_i/rho_i) * grad_w
+        Finally, update particle.velocity -= dt_sph * intermediate_velocity.
+        """
+        for particle in self.particles:
+            if particle.type_particle != "fluid":
+                continue
+            rho_i = particle.density
+            kappa_i = (particle.density_intermediate -
+                       self.rest_density) * particle.alpha / (dt_sph * dt_sph)
+            intermediate_velocity = np.zeros(2, dtype=np.float64)
+            for neighbor in particle.neighbors:
+                if neighbor.index == particle.index:
+                    continue
+                grad = grad_w(particle.position, neighbor.position, self.h)
+                if neighbor.type_particle == "fluid":
+                    rho_j = neighbor.density
+                    kappa_j = (neighbor.density_intermediate -
+                               self.rest_density) * neighbor.alpha / (dt_sph *
+                                                                      dt_sph)
+                    intermediate_velocity += self.rest_density * (
+                        (kappa_i / rho_i) + (kappa_j / rho_j)) * grad
+                elif neighbor.type_particle == "solid":
+                    intermediate_velocity += 2.0 * neighbor.mass * (
+                        kappa_i / rho_i) * grad
+            particle.velocity -= dt_sph * intermediate_velocity
+
+    def solve_pressure_cst_density(self,
+                                   nbr_iter_max=2,
+                                   threshold_density=1.0):
+        """
+        Iteratively solve for the pressure correction using a constant density approach.
+        Uses dt_sph (set to self.dt) and iterates until the average fluid density error is below threshold.
+        """
+        dt_sph = self.dt
+        for iter in range(nbr_iter_max):
+            # Update intermediate density for fluid particles
+            self.update_density_intermediate(dt_sph)
+            # Compute average fluid density from intermediate values
+            densities = [
+                p.density_intermediate for p in self.particles
+                if p.type_particle == "fluid"
+            ]
+            if len(densities) == 0:
+                break
+            avg_density = sum(densities) / len(densities)
+            if abs(avg_density - self.rest_density) < threshold_density:
+                break
+            # Adapt velocities based on the density error
+            self.adapt_velocity_density(dt_sph)
+
+    # --- End of Constant Density Solver Methods ---
+
     def compute_viscosity_forces_updated(self):
         """
         Compute viscosity forces on fluid particles, taking into account both fluid and solid neighbors.
-        For each fluid particle:
-          - If neighbor is fluid:
-              viscosity contribution = (mass/density_i) * waterViscosity * mass * (v_dot_r/denom) * grad_wij
-              where denom = ||r_ij||^2 + 0.01 * h^2 * density_neighbor.
-          - If neighbor is solid:
-              viscosity contribution = (mass/density_i) * viscosity_coefficient_solid * (neighbor.mass) * (v_dot_r/denom) * grad_wij
-              where denom = ||r_ij||^2 + 0.01 * h^2 * density_i.
-        Finally, the total viscosity force is multiplied by 10.0.
+        (See earlier documentation for details.)
         """
         for particle in self.particles:
             if particle.type_particle != "fluid":
@@ -176,7 +254,6 @@ class DFSPHSim:
                                                                 denom) * grad
                     viscosity_force += contribution
                 elif neighbor.type_particle == "solid":
-                    # Use a separate viscosity coefficient for solids.
                     coeff = self.viscosity_coefficient_solid
                     denom = r2 + 0.01 * self.h**2 * particle.density
                     grad = grad_w(particle.position, neighbor.position, self.h)
@@ -189,11 +266,7 @@ class DFSPHSim:
     def compute_pressure_forces_updated(self):
         """
         Compute pressure forces on fluid particles, taking into account both fluid and solid neighbors.
-        For each fluid particle:
-          - If neighbor is fluid:
-              pressure contribution = - mass * mass * pressure_neighbor / (density_i * density_neighbor) * grad_wij.
-          - If neighbor is solid:
-              pressure contribution = - mass * neighbor.mass * (pressure_i / density_i^2) * grad_wij.
+        (See earlier documentation for details.)
         """
         for particle in self.particles:
             if particle.type_particle != "fluid":
@@ -242,7 +315,7 @@ class DFSPHSim:
         """
         for particle in self.particles:
             if particle.type_particle == "fluid":
-                for i in range(2):  # For 2D: x (0) and y (1)
+                for i in range(2):
                     if particle.position[i] < self.grid.grid_origin[i] + 1e-2:
                         particle.position[i] = self.grid.grid_origin[
                             i] + self.h * (self.grid.grid_origin[i] -
@@ -291,21 +364,23 @@ class DFSPHSim:
             - Reset forces.
             - Find neighbors.
             - Update mass for solid particles.
-            - Compute density, alpha, and pressure.
-            - Compute viscosity and pressure forces (including solid contributions).
+            - Compute density and alpha.
+            - Solve pressure using the constant density solver.
+            - Compute viscosity forces.
+            - (Optionally compute additional pressure forces.)
             - Apply external forces.
             - Integrate velocities and positions.
             - Enforce boundary conditions.
         """
         self.adapt_dt_for_cfl()
-
         for particle in self.particles:
             particle.reset_forces()
-
         self.find_neighbors()
         self.update_mass_solid()
         self.compute_density_and_alpha()
-        self.compute_pressure()
+        # Use the constant density solver instead of the state equation:
+        self.solve_pressure_cst_density(nbr_iter_max=10, threshold_density=1.0)
+        # Optionally, one may compute viscosity and pressure forces further:
         self.compute_viscosity_forces_updated()
         self.compute_pressure_forces_updated()
         self.predict_intermediate_velocity()
