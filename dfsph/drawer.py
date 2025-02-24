@@ -75,10 +75,12 @@ class SPHDrawer:
         self.paused = False
         self.step_once = False
 
-        # For highlighting: selected particle index, its position, and neighbor indices.
+        # For highlighting: selected particle index, its position, its neighbor indices,
+        # and its force values.
         self.highlighted_index = None
         self.selected_particle_pos = None
         self.highlighted_neighbors = set()
+        self.selected_particle_forces = None
 
     def set_particles(self, particles):
         """
@@ -95,8 +97,8 @@ class SPHDrawer:
                     'alpha': p.alpha,
                     'velocity': (p.velocity[0], p.velocity[1]),
                     'neighbors': [n.index for n in p.neighbors],
-                    'type': p.
-                    type_particle  # Added particle type (e.g., "fluid" or "solid")
+                    'type': p.type_particle,  # "fluid" or "solid"
+                    'forces': p.forces  # Dictionary with force components
                 } for p in particles
             ])
 
@@ -111,7 +113,6 @@ class SPHDrawer:
         # Check if world_pos contains NaN values.
         if np.isnan(world_pos[0]) or np.isnan(world_pos[1]):
             return (-100, -100)
-
         screen_x = int(
             round((world_pos[0] - self.grid_origin[0]) * self.scale_x))
         screen_y = int(
@@ -171,23 +172,33 @@ class SPHDrawer:
 
     def get_particle_color(self, density, particle_index, pos):
         """
-        Interpolates a color based on the particle's density and its distance
-        to the selected particle.
-        
-        - The selected particle is rendered in red.
-        - For neighbor particles, the color transitions from red (close)
-          to yellow-white (farther).
-        - Otherwise, fluid particles are interpolated between blue (low density)
-          and green (high density).
+        Interpolates a color based on the particle's density.
+        Fluid particles are interpolated between blue (low density) and green (high density).
         
         :param density: The density value of the particle.
         :param particle_index: Unique particle index.
         :param pos: The particle's position (world coordinates, as a tuple or list).
         :return: (R, G, B) tuple for the particle's color.
         """
-        # Check if the particle is a boundary (solid) particle.
-        # Note: In draw_particles(), we already check for type, so this fallback is for fluid.
-        # Interpolate fluid color if not highlighted.
+        # If a particle is highlighted, adjust color based on its distance to the selected particle.
+        if self.highlighted_index is not None:
+            if particle_index == self.highlighted_index:
+                return (255, 0, 0)  # Selected particle in red.
+            elif particle_index in self.highlighted_neighbors and self.selected_particle_pos is not None:
+                # Convert positions to numpy arrays.
+                selected_pos = np.array(self.selected_particle_pos,
+                                        dtype=float)
+                current_pos = np.array(pos, dtype=float)
+                w_val = w(selected_pos, current_pos, self.h)
+                w_max = w(selected_pos, selected_pos, self.h)
+                norm = w_val / w_max if w_max != 0 else 0
+                # Interpolate between red and yellow-white:
+                #   - Close neighbors (norm ~ 1) -> red (255,0,0)
+                #   - Farther neighbors (norm ~ 0) -> yellow-white (255,255,200)
+                low_color = np.array([255, 255, 200], dtype=float)
+                high_color = np.array([255, 0, 0], dtype=float)
+                color = low_color * (1 - norm) + high_color * norm
+                return (int(color[0]), int(color[1]), int(color[2]))
         min_d, max_d = self.density_range
         normalized = np.clip((density - min_d) / (max_d - min_d), 0, 1)
         r = 0
@@ -203,10 +214,10 @@ class SPHDrawer:
         self.screen.fill(self.bg_color)
         self.draw_grid()
 
-        # Draw particles.
+        # Draw each particle.
         for particle in self.particles:
             screen_x, screen_y = self.world_to_screen(particle['pos'])
-            # If the particle is solid, color it brown.
+            # Solid particles are colored brown.
             if particle.get('type', 'fluid') == 'solid':
                 color = (150, 75, 0)
             else:
@@ -216,7 +227,7 @@ class SPHDrawer:
             pygame.draw.circle(self.screen, color, (screen_x, screen_y),
                                self.particle_radius)
 
-        # Draw highlight circle for the selected particle.
+        # Draw a highlight circle around the selected particle.
         if self.highlighted_index is not None and self.h is not None:
             for particle in self.particles:
                 if particle['index'] == self.highlighted_index:
@@ -233,10 +244,11 @@ class SPHDrawer:
     def handle_click(self, mouse_pos):
         """
         Handle mouse click events. If a control button is clicked, perform its action.
-        Otherwise, check for particle clicks to highlight a particle and its neighbors.
-        
+        Otherwise, check for particle clicks to highlight a particle and print its details.
+
         :param mouse_pos: (x, y) tuple from the mouse event.
         """
+        # Handle UI button clicks
         ui_action = self.ui.handle_click(mouse_pos)
         if ui_action is not None:
             if ui_action == "play":
@@ -253,33 +265,52 @@ class SPHDrawer:
                 print("Simulation stepped (Step).")
             return
 
+        # Convert screen coordinates to world coordinates
         world_click = self.screen_to_world(mouse_pos)
         threshold = self.particle_radius / min(self.scale_x, self.scale_y)
-        clicked_index = None
+
+        # Find the clicked particle
+        clicked_particle = None
         for particle in self.particles:
-            pos = np.array(particle['pos'])
-            if np.linalg.norm(pos - world_click) <= threshold:
-                clicked_index = particle['index']
-                print("Particle clicked:")
-                print(f"  Index: {particle['index']}")
-                print(f"  Position: {particle['pos']}")
-                print(f"  Density: {particle['density']}")
-                print(f"  Alpha: {particle['alpha']}")
-                print(f"  Velocity: {particle['velocity']}")
+            if np.linalg.norm(np.array(particle['pos']) -
+                              world_click) <= threshold:
+                clicked_particle = particle
                 break
 
-        if clicked_index is not None:
-            self.highlighted_index = clicked_index
-            for particle in self.particles:
-                if particle['index'] == clicked_index:
-                    self.selected_particle_pos = particle['pos']
-                    self.highlighted_neighbors = set(
-                        particle.get('neighbors', []))
-                    break
-        else:
+        # If no particle was clicked, reset highlighting
+        if clicked_particle is None:
             self.highlighted_index = None
             self.selected_particle_pos = None
             self.highlighted_neighbors = set()
+            return
+
+        # Highlight the selected particle
+        self.highlighted_index = clicked_particle['index']
+        self.selected_particle_pos = clicked_particle['pos']
+        self.highlighted_neighbors = set(clicked_particle.get('neighbors', []))
+
+        # Print particle information
+        print("\nParticle clicked:")
+        print(f"  Index: {clicked_particle['index']}")
+        print(f"  Position: {clicked_particle['pos']}")
+        print(f"  Density: {clicked_particle['density']:.3f}")
+        print(f"  Alpha: {clicked_particle['alpha']:.3f}")
+        print(
+            f"  Velocity: ({clicked_particle['velocity'][0]:.3f}, {clicked_particle['velocity'][1]:.3f})"
+        )
+        print(f"  Neighbors: {len(clicked_particle['neighbors'])}")
+
+        # Print force components
+        forces = clicked_particle.get('forces', {})
+        total_force = np.zeros(2)
+
+        for force_type, force_value in forces.items():
+            formatted_force = (f"{force_value[0]:.3f}, {force_value[1]:.3f}")
+            print(f"  {force_type.capitalize()} Force: ({formatted_force})")
+            total_force += force_value
+
+        # Print total force
+        print(f"  Total Forces: ({total_force[0]:.3f}, {total_force[1]:.3f})")
 
     def run(self, update_func, timestep=0.05):
         """
@@ -300,7 +331,6 @@ class SPHDrawer:
                     self.running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(event.pos)
-
             self.draw_particles()
             self.clock.tick(30)
 
