@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "DFSPH-2D"
+name = "dfsph-2d"
 version = "0.1.0"
 description = ""
 readme = "README.md"
@@ -28,3 +28,9 @@ dev = [
 [project.urls]
 "Homepage" = "https://github.com/davidAlgis/DFSPH-2D"
 "Bug Tracker" = "https://github.com/davidAlgis/DFSPH-2D/issues"
+
+[tool.setuptools]
+py-modules = [
+    "dfsph", 
+    "tests"
+]
