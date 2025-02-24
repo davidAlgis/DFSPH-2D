@@ -47,6 +47,10 @@ class DFSPHSim:
         # For solid neighbors we may wish to use a specific viscosity coefficient.
         self.viscosity_coefficient_solid = 0.01
 
+        self.find_neighbors()
+        self.compute_density_and_alpha()
+        self.update_mass_solid()
+
     def preallocate_buffers(self):
         """
         Preallocate arrays for particle data to minimize dynamic allocations.
@@ -159,32 +163,26 @@ class DFSPHSim:
                 continue
             viscosity_force = np.zeros(2, dtype=np.float64)
             for neighbor in particle.neighbors:
-                if neighbor.index == particle.index:
-                    continue
+
                 r_ij = particle.position - neighbor.position
                 r2 = r_ij[0]**2 + r_ij[1]**2
-                if r2 > self.h**2:
-                    continue  # Outside kernel support.
+
                 v_ij = particle.velocity - neighbor.velocity
                 v_dot_r = v_ij[0] * r_ij[0] + v_ij[1] * r_ij[1]
                 if neighbor.type_particle == "fluid":
-                    denom = r2 + 0.01 * self.h**2 * neighbor.density
+                    denom = r2 * neighbor.density + 0.01 * self.h**2
                     grad = grad_w(particle.position, neighbor.position, self.h)
-                    contribution = (
-                        particle.mass / particle.density
-                    ) * self.water_viscosity * particle.mass * (v_dot_r /
-                                                                denom) * grad
-                    viscosity_force += contribution
+                    viscosity_force += self.water_viscosity * particle.mass * (
+                        v_dot_r / denom) * grad
                 elif neighbor.type_particle == "solid":
                     # Use a separate viscosity coefficient for solids.
-                    coeff = self.viscosity_coefficient_solid
-                    denom = r2 + 0.01 * self.h**2 * particle.density
+                    denom = r2 * particle.density + 0.01 * self.h**2
                     grad = grad_w(particle.position, neighbor.position, self.h)
-                    contribution = (particle.mass / particle.density
-                                    ) * coeff * neighbor.mass * (v_dot_r /
-                                                                 denom) * grad
-                    viscosity_force += contribution
-            particle.add_force(VISCOSITY, 10.0 * viscosity_force)
+                    contribution = self.viscosity_coefficient_solid * neighbor.mass * (
+                        v_dot_r / denom) * grad
+                    viscosity_force -= contribution
+            force_factor = 8 * (particle.mass / particle.density)
+            particle.add_force(VISCOSITY, force_factor * viscosity_force)
 
     def compute_pressure_forces_updated(self):
         """
@@ -203,11 +201,9 @@ class DFSPHSim:
             density_i_sq = density_i * density_i
             pressure_i = particle.pressure
             for neighbor in particle.neighbors:
-                if neighbor.index == particle.index:
-                    continue
                 grad = grad_w(particle.position, neighbor.position, self.h)
                 if neighbor.type_particle == "fluid":
-                    pressure_force += -particle.mass * particle.mass * neighbor.pressure / (
+                    pressure_force += -particle.mass**2 * neighbor.pressure / (
                         density_i * neighbor.density) * grad
                 elif neighbor.type_particle == "solid":
                     pressure_force += -particle.mass * neighbor.mass * (
@@ -303,11 +299,10 @@ class DFSPHSim:
             particle.reset_forces()
 
         self.find_neighbors()
-        self.update_mass_solid()
         self.compute_density_and_alpha()
-        self.compute_pressure()
         self.compute_viscosity_forces_updated()
+        self.compute_pressure()
         self.compute_pressure_forces_updated()
         self.predict_intermediate_velocity()
         self.integrate()
-        # self.apply_boundary_penalty()
+        self.apply_boundary_penalty()
