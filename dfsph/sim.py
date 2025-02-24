@@ -45,7 +45,7 @@ class DFSPHSim:
 
         self.preallocate_buffers()
         # For solid neighbors we may wish to use a specific viscosity coefficient.
-        self.viscosity_coefficient_solid = 1.0
+        self.viscosity_coefficient_solid = 0.01
 
     def preallocate_buffers(self):
         """

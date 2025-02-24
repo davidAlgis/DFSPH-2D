@@ -53,7 +53,7 @@ def main():
         "--box_size",
         type=float,
         nargs=2,
-        default=[7, 7],
+        default=[2, 2],
         help=
         "Size of the box where particles are initialized (default: 10.0 10.0)")
     parser.add_argument("--rest_density",
@@ -66,7 +66,7 @@ def main():
         "--grid_size",
         type=int,
         nargs=2,
-        default=[8, 8],
+        default=[4, 4],
         help="Size of the grid as (width, height) (default: 50 50)")
     parser.add_argument(
         "--grid_origin",
