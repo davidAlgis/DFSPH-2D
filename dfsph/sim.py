@@ -230,6 +230,7 @@ class DFSPHSim:
         Solid particles are not moved.
         """
         epsilon = self.h * 1e-3
+        collider_damping = - max(1e-4, collider_damping)
         grid = self.grid
         bottom = np.zeros(2, np.float64)
         bottom[0] = grid.grid_origin[0] + epsilon
@@ -239,17 +240,19 @@ class DFSPHSim:
         top[1] = grid.grid_origin[1] + grid.grid_size[1] - epsilon
         
         for particle in self.particles:
-            if particle.type_particle == "fluid":
-                for i in range(2):  # For 2D: x (0) and y (1)
-                    if particle.position[i] < bottom[i]:
-                        shift = bottom[i] - particle.position[i]
-                        particle.position[i] = bottom[i] + min(1.0, shift)
-                        particle.velocity[i] *= -collider_damping
-                        
-                    elif particle.position[i] > top[i]:
-                        shift = particle.position[i] - top[i]
-                        particle.position[i] = top[i] - min(1.0, shift)
-                        particle.velocity[i] *= -collider_damping
+            if particle.type_particle != "fluid":
+                continue
+            
+            for i in range(2):  # For 2D: x (0) and y (1)
+                if particle.position[i] < bottom[i]:
+                    shift = bottom[i] - particle.position[i]
+                    particle.position[i] = bottom[i] + min(1.0, shift)
+                    particle.velocity[i] *= collider_damping
+                    
+                elif particle.position[i] > top[i]:
+                    shift = particle.position[i] - top[i]
+                    particle.position[i] = top[i] - min(1.0, shift)
+                    particle.velocity[i] *= collider_damping
 
     def find_neighbors(self):
         """
