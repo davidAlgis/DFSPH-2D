@@ -58,7 +58,7 @@ def main():
         "Size of the box where particles are initialized (default: 10.0 10.0)")
     parser.add_argument("--rest_density",
                         type=float,
-                        default=1027.0,
+                        default=102.0,
                         help="Rest density of the fluid (default: 1027 kg/m³)")
 
     # Grid parameters
@@ -103,7 +103,8 @@ def main():
                    dt=args.timestep,
                    grid_origin=tuple(args.grid_origin),
                    grid_size=tuple(args.grid_size),
-                   cell_size=cell_size)
+                   cell_size=cell_size,
+                   rest_density=args.rest_density)
 
     if args.visualize:
         # Create the visualization drawer
