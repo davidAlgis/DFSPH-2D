@@ -28,7 +28,7 @@ def main():
     parser.add_argument("-r",
                         "--support_radius",
                         type=float,
-                        default=0.2742,
+                        default=0.2742/2,
                         help="SPH support radius (default: 0.2742)")
     parser.add_argument("-dt",
                         "--timestep",

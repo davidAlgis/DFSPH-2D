@@ -49,7 +49,7 @@ class Grid:
                 raise ValueError(
                         f"particle has a bad position {particle.position} -> {cell_index} (not in the grid)")
 
-    def find_neighbors(self, particle):
+    def find_neighbors(self, particle, h):
         """
         Find the neighboring particles of a given particle using the grid.
 
@@ -70,7 +70,9 @@ class Grid:
             for y in range(ymin, ymax + 1):
                 for neighbor in self.cells[x][y]:
                     if neighbor.index is not particle.index:
-                        neighbors.append(neighbor)
+                        r2 = np.linalg.norm(particle.position - neighbor.position)
+                        if r2 < h:
+                            neighbors.append(neighbor)
         return neighbors
 
     def get_cell_index(self, position):

@@ -30,7 +30,7 @@ def test_grid():
     grid.update_grid(particles)
 
     # Test finding neighbors for the particle at index 2 (position [2.5, 2.5])
-    neighbors = grid.find_neighbors(particles[2])
+    neighbors = grid.find_neighbors(particles[2], h=1.0)
 
     # Expected neighbors are particles in adjacent cells
     expected_neighbors = [

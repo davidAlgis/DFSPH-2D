@@ -3,6 +3,7 @@ from dfsph.grid import Grid
 from dfsph.particle import PRESSURE, VISCOSITY, EXTERNAL, SURFACE_TENSION
 import dfsph.sph_accelerated
 from dfsph.kernels import w, grad_w  # SPH kernel and its gradient
+from numba import njit, prange
 
 
 class DFSPHSim:
@@ -112,6 +113,7 @@ class DFSPHSim:
             particle.alpha = alphas[i]
             total_density += densities[i]
         self.mean_density = total_density / self.num_particles
+
 
     def compute_pressure(self, B=1000.0, gamma=7):
         """
@@ -263,7 +265,7 @@ class DFSPHSim:
         """
         self.grid.update_grid(self.particles)
         for particle in self.particles:
-            particle.neighbors = self.grid.find_neighbors(particle)
+            particle.neighbors = self.grid.find_neighbors(particle, self.h)
 
     def adapt_dt_for_cfl(self):
         """
