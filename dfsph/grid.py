@@ -65,7 +65,7 @@ class Grid:
         for x in range(xmin, xmax + 1):
             for y in range(ymin, ymax + 1):
                 for neighbor in self.cells[x][y]:
-                    if neighbor is not particle:
+                    if neighbor.index is not particle.index:
                         neighbors.append(neighbor)
         return neighbors
 

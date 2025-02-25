@@ -28,16 +28,16 @@ def compute_density_alpha_numba(positions, masses, neighbor_indices,
 
             # Compute kernel and gradient using Numba-accelerated functions
             wij = w(positions[i], positions[j], h)
-            grad_wij = grad_w(positions[i], positions[j], h)
-
             density_fluid += masses[j] * wij
-
+            
             # Sum gradient terms for alpha computation
+            grad_wij = grad_w(positions[i], positions[j], h)
             sum_abs0 += masses[j] * grad_wij[0]
             sum_abs1 += masses[j] * grad_wij[1]
             abs_sum += (masses[j]**2) * (grad_wij[0]**2 + grad_wij[1]**2)
 
-        densities[i] = max(density_fluid, min_density)
+        density_fluid = max(density_fluid, min_density)
+        densities[i] = density_fluid
         norm = sum_abs0**2 + sum_abs1**2
         alphas[i] = density_fluid / (norm + abs_sum + 1e-5)
 

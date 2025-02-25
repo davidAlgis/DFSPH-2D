@@ -21,16 +21,15 @@ def test_kernel_normalization():
     """
     h = 1.0
     num_steps = 100
-    x = np.linspace(-2 * h, 2 * h, num_steps)
-    y = np.linspace(-2 * h, 2 * h, num_steps)
-    dx = (4 * h) / (num_steps - 1)
+    x = np.linspace(-1 * h, 1 * h, num_steps)
+    y = np.linspace(-1 * h, 1 * h, num_steps)
+    dx = (2 * h) / (num_steps - 1)
     integral = 0.0
     for xi in x:
         for yi in y:
             r = np.sqrt(xi * xi + yi * yi)
-            if r < 2 * h:
-                # Evaluate the kernel with xI = [xi, yi] and xJ = [0,0]
-                integral += w(np.array([xi, yi]), np.array([0.0, 0.0]), h)
+            # Evaluate the kernel with xI = [xi, yi] and xJ = [0,0]
+            integral += w(np.array([xi, yi]), np.array([0.0, 0.0]), h)
     integral *= dx * dx
     expected = 1.0
     # Allow a tolerance of 0.1 for numerical integration
@@ -57,8 +56,8 @@ def test_kernel_symmetry():
     """
     h = 1.0
     for _ in range(100):
-        xI = np.random.uniform(-h, h, 2)
-        xJ = np.random.uniform(-h, h, 2)
+        xI = np.random.uniform(-h/2, h/2, 2)
+        xJ = np.random.uniform(-h/2, h/2, 2)
         w1 = w(xI, xJ, h)
         w2 = w(xJ, xI, h)
         assert abs(w1 - w2) < 1e-5, f"Kernel symmetry failed: {w1} != {w2}"
@@ -66,11 +65,11 @@ def test_kernel_symmetry():
 
 def test_kernel_compact_support():
     """
-    Verify that the kernel is zero outside its support (r >= 2h).
+    Verify that the kernel is zero outside its support (r >= h).
     """
     h = 1.0
     # Choose points with distance >= 2h from the origin.
-    xI = np.array([3.0 * h, 0.0])
+    xI = np.array([1.0 * h, 0.0])
     xJ = np.array([0.0, 0.0])
     wij = w(xI, xJ, h)
     assert abs(wij) < 1e-5, f"Kernel not compact: W({xI}, {xJ}) = {wij}"

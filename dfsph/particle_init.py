@@ -135,4 +135,4 @@ def add_boundary_particles(count, box_origin, box_size, spacing, mass, h):
             Particle(count, pos, np.zeros(2), mass, h, type_particle="solid"))
         count += 1
 
-    return boundary_particles
+    return []#boundary_particles
