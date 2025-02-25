@@ -229,21 +229,26 @@ class DFSPHSim:
         Apply penalty forces when fluid particles hit the simulation boundaries.
         Solid particles are not moved.
         """
+        epsilon = self.h * 1e-3
+        grid = self.grid
+        bottom = np.zeros(2, np.float64)
+        bottom[0] = grid.grid_origin[0] + epsilon
+        bottom[1] = grid.grid_origin[1] + epsilon
+        top = np.zeros(2, np.float64)
+        top[0] = grid.grid_origin[0] + grid.grid_size[0] - epsilon
+        top[1] = grid.grid_origin[1] + grid.grid_size[1] - epsilon
+        
         for particle in self.particles:
             if particle.type_particle == "fluid":
                 for i in range(2):  # For 2D: x (0) and y (1)
-                    if particle.position[i] < self.grid.grid_origin[i] + 1e-2:
-                        particle.position[i] = self.grid.grid_origin[
-                            i] + self.h * (self.grid.grid_origin[i] -
-                                           particle.position[i])
+                    if particle.position[i] < bottom[i]:
+                        shift = bottom[i] - particle.position[i]
+                        particle.position[i] = bottom[i] + min(1.0, shift)
                         particle.velocity[i] *= -collider_damping
-                    elif particle.position[i] > self.grid.grid_origin[
-                            i] + self.grid.grid_size[i] - 1e-2:
-                        particle.position[i] = (
-                            self.grid.grid_origin[i] + self.grid.grid_size[i]
-                        ) - self.h * (particle.position[i] -
-                                      (self.grid.grid_origin[i] +
-                                       self.grid.grid_size[i]))
+                        
+                    elif particle.position[i] > top[i]:
+                        shift = particle.position[i] - top[i]
+                        particle.position[i] = top[i] - min(1.0, shift)
                         particle.velocity[i] *= -collider_damping
 
     def find_neighbors(self):

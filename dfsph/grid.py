@@ -44,6 +44,10 @@ class Grid:
             cell_index = self.get_cell_index(particle.position)
             if self.is_within_bounds(cell_index):
                 self.cells[cell_index[0]][cell_index[1]].append(particle)
+            else:
+                print
+                raise ValueError(
+                        f"particle has a bad position {particle.position} -> {cell_index} (not in the grid)")
 
     def find_neighbors(self, particle):
         """
