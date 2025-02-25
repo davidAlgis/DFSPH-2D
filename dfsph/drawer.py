@@ -74,13 +74,17 @@ class SPHDrawer:
         # Simulation control flags.
         self.paused = False
         self.step_once = False
+        self.just_stepped = False  # Flag to indicate a step update just occurred
 
-        # For highlighting: selected particle index, its position, its neighbor indices,
+        # For highlighting: selected particle index, its position, neighbor indices,
         # and its force values.
         self.highlighted_index = None
         self.selected_particle_pos = None
         self.highlighted_neighbors = set()
         self.selected_particle_forces = None
+
+        # Frame counter for printing.
+        self.frame_count = 0
 
     def set_particles(self, particles):
         """
@@ -178,7 +182,7 @@ class SPHDrawer:
         
         :param density: The density value of the particle.
         :param particle_index: Unique particle index.
-        :param pos: The particle's position (world coordinates, as a tuple or list).
+        :param pos: The particle's position (world coordinates).
         :return: (R, G, B) tuple for the particle's color.
         """
         # If a particle is highlighted, adjust color based on its distance to the selected particle.
@@ -242,11 +246,42 @@ class SPHDrawer:
         self.draw_buttons()
         pygame.display.flip()
 
+    def print_highlighted_particle_info(self):
+        """
+        Print the selected particle's information along with the current frame count.
+        """
+        if self.highlighted_index is None:
+            return
+
+        for particle in self.particles:
+            if particle['index'] == self.highlighted_index:
+                print(f"\nFrame {self.frame_count}:")
+                print(f"  Index: {particle['index']}")
+                pos = particle['position']
+                print(f"  Position: ({pos[0]:.3f}, {pos[1]:.3f})")
+                print(f"  Density: {particle['density']:.3f}")
+                print(f"  Mass: {particle['mass']:.3f}")
+                print(f"  Alpha: {particle['alpha']:.3f}")
+                vel = particle['velocity']
+                print(f"  Velocity: ({vel[0]:.3f}, {vel[1]:.3f})")
+                print(f"  Neighbors: {len(particle['neighbors'])}")
+                forces = particle.get('forces', {})
+                total_force = np.zeros(2)
+                for force_type, force_value in forces.items():
+                    formatted_force = f"{force_value[0]:.3f}, {force_value[1]:.3f}"
+                    print(
+                        f"  {force_type.capitalize()} Force: ({formatted_force})"
+                    )
+                    total_force += force_value
+                print(
+                    f"  Total Forces: ({total_force[0]:.3f}, {total_force[1]:.3f})"
+                )
+                break
+
     def handle_click(self, mouse_pos):
         """
         Handle mouse click events. If a control button is clicked, perform its action.
         Otherwise, check for particle clicks to highlight a particle and print its details.
-
         :param mouse_pos: (x, y) tuple from the mouse event.
         """
         # Handle UI button clicks
@@ -290,30 +325,22 @@ class SPHDrawer:
         self.selected_particle_pos = clicked_particle['position']
         self.highlighted_neighbors = set(clicked_particle.get('neighbors', []))
 
-        # Print particle information
         print("\nParticle clicked:")
         print(f"  Index: {clicked_particle['index']}")
-        print(
-            f"  Position: ({clicked_particle['position'][0]:.3f}, {clicked_particle['position'][1]:.3f})"
-        )
+        pos = clicked_particle['position']
+        print(f"  Position: ({pos[0]:.3f}, {pos[1]:.3f})")
         print(f"  Density: {clicked_particle['density']:.3f}")
         print(f"  Mass: {clicked_particle['mass']:.3f}")
         print(f"  Alpha: {clicked_particle['alpha']:.3f}")
-        print(
-            f"  Velocity: ({clicked_particle['velocity'][0]:.3f}, {clicked_particle['velocity'][1]:.3f})"
-        )
+        vel = clicked_particle['velocity']
+        print(f"  Velocity: ({vel[0]:.3f}, {vel[1]:.3f})")
         print(f"  Neighbors: {len(clicked_particle['neighbors'])}")
-
-        # Print force components
         forces = clicked_particle.get('forces', {})
         total_force = np.zeros(2)
-
         for force_type, force_value in forces.items():
-            formatted_force = (f"{force_value[0]:.3f}, {force_value[1]:.3f}")
+            formatted_force = f"{force_value[0]:.3f}, {force_value[1]:.3f}"
             print(f"  {force_type.capitalize()} Force: ({formatted_force})")
             total_force += force_value
-
-        # Print total force
         print(f"  Total Forces: ({total_force[0]:.3f}, {total_force[1]:.3f})")
 
     def run(self, update_func, timestep=0.05):
@@ -336,6 +363,17 @@ class SPHDrawer:
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(event.pos)
             self.draw_particles()
+
+            # Print particle info only if simulation is running (not paused) continuously;
+            # if paused, print only once when a step occurs.
+            if not self.paused:
+                self.print_highlighted_particle_info()
+                self.frame_count += 1
+            elif self.just_stepped:
+                self.print_highlighted_particle_info()
+                self.frame_count += 1
+                self.just_stepped = False
+
             self.clock.tick(30)
 
         pygame.quit()
@@ -349,3 +387,4 @@ class SPHDrawer:
                 update_func()
                 if self.step_once:
                     self.step_once = False
+                    self.just_stepped = True
