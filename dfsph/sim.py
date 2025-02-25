@@ -137,14 +137,15 @@ class DFSPHSim:
             Then set: particle.mass = rest_density * gamma_mass_solid / massSolid
         """
         for particle in self.particles:
-            if particle.type_particle == "solid":
-                massSolid = 0.0
-                for neighbor in particle.neighbors:
-                    if neighbor.index != particle.index and neighbor.type_particle == "solid":
-                        massSolid += w(particle.position, neighbor.position,
-                                       self.h)
-                if massSolid > 1e-8:
-                    particle.mass = self.rest_density * self.gamma_mass_solid / massSolid
+            if particle.type_particle == "fluid":
+                continue
+            massSolid = 0.0
+            for neighbor in particle.neighbors:
+                if neighbor.type_particle == "solid":
+                    massSolid += w(particle.position, neighbor.position,
+                                   self.h)
+            if massSolid > 1e-8:
+                particle.mass = self.rest_density * self.gamma_mass_solid / massSolid
 
     def compute_viscosity_forces_updated(self):
         """
@@ -201,13 +202,13 @@ class DFSPHSim:
             density_i_sq = density_i * density_i
             pressure_i = particle.pressure
             for neighbor in particle.neighbors:
-                grad = grad_w(particle.position, neighbor.position, self.h)
+                grad_wij = grad_w(particle.position, neighbor.position, self.h)
                 if neighbor.type_particle == "fluid":
                     pressure_force += -particle.mass**2 * neighbor.pressure / (
-                        density_i * neighbor.density) * grad
+                        density_i * neighbor.density) * grad_wij
                 elif neighbor.type_particle == "solid":
                     pressure_force += -particle.mass * neighbor.mass * (
-                        pressure_i / density_i_sq) * grad
+                        pressure_i / density_i_sq) * grad_wij
             particle.add_force(PRESSURE, pressure_force)
 
     def predict_intermediate_velocity(self):
