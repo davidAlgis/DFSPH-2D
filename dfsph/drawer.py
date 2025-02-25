@@ -92,8 +92,9 @@ class SPHDrawer:
             self.particles = np.array([
                 {
                     'index': p.index,
-                    'pos': (p.position[0], p.position[1]),
+                    'position': (p.position[0], p.position[1]),
                     'density': p.density,
+                    'mass': p.mass,
                     'alpha': p.alpha,
                     'velocity': (p.velocity[0], p.velocity[1]),
                     'neighbors': [n.index for n in p.neighbors],
@@ -216,14 +217,14 @@ class SPHDrawer:
 
         # Draw each particle.
         for particle in self.particles:
-            screen_x, screen_y = self.world_to_screen(particle['pos'])
+            screen_x, screen_y = self.world_to_screen(particle['position'])
             # Solid particles are colored brown.
             if particle.get('type', 'fluid') == 'solid':
                 color = (150, 75, 0)
             else:
                 color = self.get_particle_color(particle['density'],
                                                 particle['index'],
-                                                particle['pos'])
+                                                particle['position'])
             pygame.draw.circle(self.screen, color, (screen_x, screen_y),
                                self.particle_radius)
 
@@ -231,7 +232,7 @@ class SPHDrawer:
         if self.highlighted_index is not None and self.h is not None:
             for particle in self.particles:
                 if particle['index'] == self.highlighted_index:
-                    center = self.world_to_screen(particle['pos'])
+                    center = self.world_to_screen(particle['position'])
                     scale = min(self.scale_x, self.scale_y)
                     circle_radius = int(2 * self.h * scale)
                     pygame.draw.circle(self.screen, (255, 255, 255), center,
@@ -272,7 +273,7 @@ class SPHDrawer:
         # Find the clicked particle
         clicked_particle = None
         for particle in self.particles:
-            if np.linalg.norm(np.array(particle['pos']) -
+            if np.linalg.norm(np.array(particle['position']) -
                               world_click) <= threshold:
                 clicked_particle = particle
                 break
@@ -286,14 +287,17 @@ class SPHDrawer:
 
         # Highlight the selected particle
         self.highlighted_index = clicked_particle['index']
-        self.selected_particle_pos = clicked_particle['pos']
+        self.selected_particle_pos = clicked_particle['position']
         self.highlighted_neighbors = set(clicked_particle.get('neighbors', []))
 
         # Print particle information
         print("\nParticle clicked:")
         print(f"  Index: {clicked_particle['index']}")
-        print(f"  Position: {clicked_particle['pos']}")
+        print(
+            f"  Position: ({clicked_particle['position'][0]:.3f}, {clicked_particle['position'][1]:.3f})"
+        )
         print(f"  Density: {clicked_particle['density']:.3f}")
+        print(f"  Mass: {clicked_particle['mass']:.3f}")
         print(f"  Alpha: {clicked_particle['alpha']:.3f}")
         print(
             f"  Velocity: ({clicked_particle['velocity'][0]:.3f}, {clicked_particle['velocity'][1]:.3f})"
