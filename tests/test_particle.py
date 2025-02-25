@@ -105,14 +105,22 @@ def test_solid_particle_creation():
     """Test solid particle type handling"""
     solid_particle = Particle(
         index=3,
-        position=[0.0, 0.0],
-        velocity=[0.0, 0.0],
+        position=[0.0, 1.0],
+        velocity=[2.0, 3.0],
         mass=2.0,
         h=0.2,
         type_particle="solid"
     )
     assert solid_particle.type_particle == "solid"
-
+    assert solid_particle.mass == 2.0
+    assert solid_particle.h == 0.2
+    assert solid_particle.index == 3
+    assert solid_particle.position[0] == 0.0 
+    assert solid_particle.position[1] == 1.0 
+    assert solid_particle.velocity[0] == 2.0 
+    assert solid_particle.velocity[1] == 3.0 
+    
+        
 def test_data_type_verification(default_particle):
     """Verify numpy array data types"""
     assert isinstance(default_particle.position, np.ndarray)
