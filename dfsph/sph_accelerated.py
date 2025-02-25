@@ -115,3 +115,151 @@ def compute_pressure_forces_wcsph(positions, pressures, densities, masses,
         pressure_forces[i, 1] = -force[1]
 
     return pressure_forces
+
+
+@njit(parallel=True)
+def update_mass_solid_numba(positions, is_solid, neighbor_indices,
+                            neighbor_starts, neighbor_counts, h, rest_density,
+                            gamma_mass_solid, masses_out):
+    """
+    For each solid particle, sum the w() contributions from neighbors that are also solid.
+    Then set particle.mass = rest_density * gamma_mass_solid / sum_w
+    If sum_w <= 1e-8, do nothing (mass remains the same).
+    
+    :param positions: (N,2) array of positions.
+    :param is_solid: (N,) int array (1 if solid, 0 if fluid).
+    :param neighbor_indices: 1D array of neighbor indices.
+    :param neighbor_starts, neighbor_counts: For neighbor iteration.
+    :param h: Smoothing length.
+    :param rest_density: The base fluid rest density.
+    :param gamma_mass_solid: Factor to update mass for solids.
+    :param masses_out: (N,) array of masses to update in-place for solids.
+    """
+    n = positions.shape[0]
+
+    for i in prange(n):
+        if is_solid[i] == 1:  # Only update mass for solid
+            start = neighbor_starts[i]
+            count = neighbor_counts[i]
+            sum_w_val = 0.0
+
+            for k in range(count):
+                j = neighbor_indices[start + k]
+                if is_solid[j] == 1:  # neighbor also solid
+                    sum_w_val += w(positions[i], positions[j], h)
+
+            if sum_w_val > 1e-8:
+                masses_out[i] = rest_density * gamma_mass_solid / sum_w_val
+        # else fluid => do nothing
+    return masses_out
+
+
+@njit(parallel=True)
+def compute_pressure_forces_updated_numba(positions, is_solid, densities,
+                                          pressures, masses, neighbor_indices,
+                                          neighbor_starts, neighbor_counts, h):
+    """
+    Compute the pressure force for each fluid particle.
+    
+    For each fluid particle i:
+      - If neighbor j is fluid:
+          F += -mass_i^2 * p_j / (rho_i*rho_j) * gradW_ij
+      - If neighbor j is solid:
+          F += -mass_i * mass_j * (p_i / rho_i^2) * gradW_ij
+    
+    Returns pressure_forces: (N, 2) array of the computed pressure force for each particle.
+    """
+    n = positions.shape[0]
+    pressure_forces = np.zeros((n, 2), dtype=np.float64)
+
+    for i in prange(n):
+        if is_solid[i] == 1:
+            continue  # skip solids
+
+        rho_i = densities[i]
+        pi = pressures[i]
+        mass_i = masses[i]
+        rho_i_sq = rho_i * rho_i
+
+        start = neighbor_starts[i]
+        count = neighbor_counts[i]
+
+        force_accum = np.zeros(2, dtype=np.float64)
+
+        for k in range(count):
+            j = neighbor_indices[start + k]
+            grad_wij = grad_w(positions[i], positions[j], h)
+
+            if is_solid[j] == 0:
+                # neighbor is fluid
+                force_accum -= (mass_i**2 * pressures[j] /
+                                (rho_i * densities[j])) * grad_wij
+            else:
+                # neighbor is solid
+                force_accum -= (mass_i * masses[j] *
+                                (pi / rho_i_sq)) * grad_wij
+
+        pressure_forces[i, 0] = force_accum[0]
+        pressure_forces[i, 1] = force_accum[1]
+
+    return pressure_forces
+
+
+@njit(parallel=True)
+def compute_viscosity_forces_updated_numba(positions, velocities, is_solid,
+                                           densities, masses, neighbor_indices,
+                                           neighbor_starts, neighbor_counts, h,
+                                           water_viscosity,
+                                           viscosity_coefficient_solid):
+    """
+    Compute viscosity force for each fluid particle i based on neighbors j.
+    
+    If neighbor j is fluid:
+       denom = r^2*density_j + 1e-5
+       force += water_viscosity * mass_j * (v_dot_r / denom)*gradW_ij
+    If neighbor j is solid:
+       denom = r^2*density_i + 1e-5
+       force -= viscosity_coefficient_solid * mass_j*(v_dot_r/denom)*gradW_ij
+    
+    Multiply final force by factor = 8*(mass_i/density_i) and store in out array.
+    """
+    n = positions.shape[0]
+    viscosity_forces = np.zeros((n, 2), dtype=np.float64)
+
+    for i in prange(n):
+        if is_solid[i] == 1:
+            continue  # skip solids
+
+        force_accum = np.zeros(2, dtype=np.float64)
+        mass_i = masses[i]
+        rho_i = densities[i]
+        vel_i = velocities[i]
+
+        start = neighbor_starts[i]
+        count = neighbor_counts[i]
+
+        for k in range(count):
+            j = neighbor_indices[start + k]
+            r_ij = positions[i] - positions[j]
+            r2 = r_ij[0] * r_ij[0] + r_ij[1] * r_ij[1] + 1e-5
+
+            v_ij = vel_i - velocities[j]
+            v_dot_r = v_ij[0] * r_ij[0] + v_ij[1] * r_ij[1]
+
+            grad = grad_w(positions[i], positions[j], h)
+
+            if is_solid[j] == 0:
+                # neighbor fluid
+                denom = r2 * densities[j] + 1e-5
+                force_accum += water_viscosity * masses[j] * (v_dot_r /
+                                                              denom) * grad
+            else:
+                # neighbor solid
+                denom = r2 * rho_i + 1e-5
+                force_accum -= viscosity_coefficient_solid * masses[j] * (
+                    v_dot_r / denom) * grad
+
+        factor = 8.0 * (mass_i / (rho_i + 1e-5))
+        viscosity_forces[i] = factor * force_accum
+
+    return viscosity_forces
