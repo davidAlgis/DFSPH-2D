@@ -229,15 +229,8 @@ class DFSPHSim:
         Apply penalty forces when fluid particles hit the simulation boundaries.
         Solid particles are not moved.
         """
-        epsilon = self.h * 1e-3
         collider_damping = - max(1e-4, collider_damping)
-        grid = self.grid
-        bottom = np.zeros(2, np.float64)
-        bottom[0] = grid.grid_origin[0] + epsilon
-        bottom[1] = grid.grid_origin[1] + epsilon
-        top = np.zeros(2, np.float64)
-        top[0] = grid.grid_origin[0] + grid.grid_size[0] - epsilon
-        top[1] = grid.grid_origin[1] + grid.grid_size[1] - epsilon
+        bottom, top = self.get_bottom_and_top(self.h * 1e-3)
         
         for particle in self.particles:
             if particle.type_particle != "fluid":
@@ -253,6 +246,16 @@ class DFSPHSim:
                     shift = particle.position[i] - top[i]
                     particle.position[i] = top[i] - min(1.0, shift)
                     particle.velocity[i] *= collider_damping
+
+    def get_bottom_and_top(self, epsilon=0.0):
+        grid = self.grid
+        bottom = np.zeros(2, np.float64)
+        bottom[0] = grid.grid_origin[0] + epsilon
+        bottom[1] = grid.grid_origin[1] + epsilon
+        top = np.zeros(2, np.float64)
+        top[0] = grid.grid_origin[0] + grid.grid_size[0] - epsilon
+        top[1] = grid.grid_origin[1] + grid.grid_size[1] - epsilon
+        return bottom,top
 
     def find_neighbors(self):
         """
