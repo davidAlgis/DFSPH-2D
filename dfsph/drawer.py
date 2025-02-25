@@ -238,7 +238,7 @@ class SPHDrawer:
                 if particle['index'] == self.highlighted_index:
                     center = self.world_to_screen(particle['position'])
                     scale = min(self.scale_x, self.scale_y)
-                    circle_radius = int(2 * self.h * scale)
+                    circle_radius = int(self.h * scale)
                     pygame.draw.circle(self.screen, (255, 255, 255), center,
                                        circle_radius, 2)
                     break
