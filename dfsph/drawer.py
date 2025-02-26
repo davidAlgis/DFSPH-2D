@@ -3,7 +3,7 @@ import pygame
 import numpy as np
 import threading
 from dfsph.drawer_ui import UIDrawer
-from dfsph.kernels import w
+from dfsph.kernels import w  # Kernel functions (Numba accelerated)
 
 
 class SPHDrawer:
@@ -60,7 +60,7 @@ class SPHDrawer:
         self.grid_color = (100, 100, 100)  # Gray grid lines.
         self.density_range = density_range
 
-        self.particles = []  # This will be set via set_particles().
+        self.particles = []  # Will be set via set_particles().
         self.running = False
         self.clock = pygame.time.Clock()
 
@@ -86,15 +86,16 @@ class SPHDrawer:
         # Frame counter for printing.
         self.frame_count = 0
 
-        # Initialize a font for rendering the FPS.
+        # Initialize a font for rendering simulation time.
         self.font = pygame.font.SysFont("Arial", 18)
+
+        # Simulation time and timestep (to be set in run()).
+        self.sim_time = 0.0
+        self.timestep = 0.0
+
     def set_particles(self, particles):
         """
         Update the particle positions and properties from the simulation.
-        
-        This method converts the new Particles instance (storing data in numpy arrays)
-        into a list of dictionaries for easier drawing. If the simulation updates
-        additional properties (e.g., density, forces), those should be integrated here.
         
         :param particles: A Particles instance from dfsph.particles.
         """
@@ -227,7 +228,7 @@ class SPHDrawer:
     def draw_particles(self):
         """
         Draw all particles with colors based on density and highlighting.
-        Also draws a circle of radius 2h around the selected particle and displays the FPS.
+        Also draws a circle of radius 2h around the selected particle and displays the simulation time.
         """
         self.screen.fill(self.bg_color)
         self.draw_grid()
@@ -255,10 +256,10 @@ class SPHDrawer:
                                        circle_radius, 2)
                     break
 
-        # --- Draw FPS counter in top left corner ---
-        fps = self.clock.get_fps()
-        fps_text = self.font.render(f"FPS: {fps:.2f}", True, (255, 255, 255))
-        self.screen.blit(fps_text, (5, 5))
+        # --- Draw Simulation Time counter in top left corner ---
+        sim_time_text = self.font.render(f"Sim Time: {self.sim_time:.2f} s",
+                                         True, (255, 255, 255))
+        self.screen.blit(sim_time_text, (5, 5))
         # -------------------------------------------
 
         self.draw_buttons()
@@ -367,9 +368,10 @@ class SPHDrawer:
         Start the Pygame event loop to visualize the simulation.
         
         :param update_func: Function to update simulation at each timestep.
-        :param timestep: Time interval (seconds) between each update.
+        :param timestep: Time interval (seconds) between each simulation update.
         """
         self.running = True
+        self.timestep = timestep
         sim_thread = threading.Thread(target=self.simulation_loop,
                                       args=(update_func, ),
                                       daemon=True)
@@ -399,10 +401,12 @@ class SPHDrawer:
     def simulation_loop(self, update_func):
         """
         Runs the simulation update function in a separate thread.
+        Each update increments the simulation time by the timestep.
         """
         while self.running:
             if not self.paused or self.step_once:
                 update_func()
+                self.sim_time += self.timestep
                 if self.step_once:
                     self.step_once = False
                     self.just_stepped = True
