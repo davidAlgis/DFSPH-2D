@@ -60,7 +60,7 @@ class SPHDrawer:
         self.grid_color = (100, 100, 100)  # Gray grid lines.
         self.density_range = density_range
 
-        self.particles = []  # Will be set via set_particles().
+        self.particles = []  # This will be set via set_particles().
         self.running = False
         self.clock = pygame.time.Clock()
 
@@ -86,26 +86,43 @@ class SPHDrawer:
         # Frame counter for printing.
         self.frame_count = 0
 
+        # Initialize a font for rendering the FPS.
+        self.font = pygame.font.SysFont("Arial", 18)
     def set_particles(self, particles):
         """
         Update the particle positions and properties from the simulation.
         
-        :param particles: List of Particle instances.
+        This method converts the new Particles instance (storing data in numpy arrays)
+        into a list of dictionaries for easier drawing. If the simulation updates
+        additional properties (e.g., density, forces), those should be integrated here.
+        
+        :param particles: A Particles instance from dfsph.particles.
         """
-        if len(particles) > 0:
-            self.particles = np.array([
-                {
-                    'index': p.index,
-                    'position': (p.position[0], p.position[1]),
-                    'density': p.density,
-                    'mass': p.mass,
-                    'alpha': p.alpha,
-                    'velocity': (p.velocity[0], p.velocity[1]),
-                    'neighbors': [n.index for n in p.neighbors],
-                    'type': p.type_particle,  # "fluid" or "solid"
-                    'forces': p.forces  # Dictionary with force components
-                } for p in particles
-            ])
+        n = particles.num_particles
+        # Use provided density if available; otherwise default to 0.
+        if hasattr(particles, 'density'):
+            density_arr = particles.density
+        else:
+            density_arr = np.zeros(n, dtype=np.float32)
+        # Create a list of particle dictionaries.
+        self.particles = []
+        for i in range(n):
+            particle_dict = {
+                'index': i,
+                'position': (particles.position[i, 0], particles.position[i,
+                                                                          1]),
+                'density': density_arr[i],
+                'mass': particles.mass[i],
+                'alpha': particles.alpha[i],
+                'velocity': (particles.velocity[i, 0], particles.velocity[i,
+                                                                          1]),
+                'neighbors': particles.neighbors[i],
+                'type': 'fluid' if particles.types[i] == 0 else 'solid',
+                'forces': {
+                }  # Default empty dictionary; update if simulation computes forces.
+            }
+            self.particles.append(particle_dict)
+        self.particles = np.array(self.particles)
 
     def world_to_screen(self, world_pos):
         """
@@ -164,7 +181,7 @@ class SPHDrawer:
                              (top_left[0], screen_y),
                              (bottom_right[0], screen_y), 1)
 
-        # Draw border in brown.
+        # Draw border.
         pygame.draw.rect(self.screen, self.border_color,
                          (top_left[0], bottom_right[1], bottom_right[0] -
                           top_left[0], top_left[1] - bottom_right[1]), 2)
@@ -190,16 +207,12 @@ class SPHDrawer:
             if particle_index == self.highlighted_index:
                 return (255, 0, 0)  # Selected particle in red.
             elif particle_index in self.highlighted_neighbors and self.selected_particle_pos is not None:
-                # Convert positions to numpy arrays.
                 selected_pos = np.array(self.selected_particle_pos,
                                         dtype=float)
                 current_pos = np.array(pos, dtype=float)
                 w_val = w(selected_pos, current_pos, self.h)
                 w_max = w(selected_pos, selected_pos, self.h)
                 norm = w_val / w_max if w_max != 0 else 0
-                # Interpolate between red and yellow-white:
-                #   - Close neighbors (norm ~ 1) -> red (255,0,0)
-                #   - Farther neighbors (norm ~ 0) -> yellow-white (255,255,200)
                 low_color = np.array([255, 255, 200], dtype=float)
                 high_color = np.array([255, 0, 0], dtype=float)
                 color = low_color * (1 - norm) + high_color * norm
@@ -214,7 +227,7 @@ class SPHDrawer:
     def draw_particles(self):
         """
         Draw all particles with colors based on density and highlighting.
-        Also draws a circle of radius 2h around the selected particle.
+        Also draws a circle of radius 2h around the selected particle and displays the FPS.
         """
         self.screen.fill(self.bg_color)
         self.draw_grid()
@@ -222,7 +235,6 @@ class SPHDrawer:
         # Draw each particle.
         for particle in self.particles:
             screen_x, screen_y = self.world_to_screen(particle['position'])
-            # Solid particles are colored brown.
             if particle.get('type', 'fluid') == 'solid':
                 color = (150, 75, 0)
             else:
@@ -242,6 +254,12 @@ class SPHDrawer:
                     pygame.draw.circle(self.screen, (255, 255, 255), center,
                                        circle_radius, 2)
                     break
+
+        # --- Draw FPS counter in top left corner ---
+        fps = self.clock.get_fps()
+        fps_text = self.font.render(f"FPS: {fps:.2f}", True, (255, 255, 255))
+        self.screen.blit(fps_text, (5, 5))
+        # -------------------------------------------
 
         self.draw_buttons()
         pygame.display.flip()
@@ -282,9 +300,10 @@ class SPHDrawer:
         """
         Handle mouse click events. If a control button is clicked, perform its action.
         Otherwise, check for particle clicks to highlight a particle and print its details.
+        
         :param mouse_pos: (x, y) tuple from the mouse event.
         """
-        # Handle UI button clicks
+        # Handle UI button clicks.
         ui_action = self.ui.handle_click(mouse_pos)
         if ui_action is not None:
             if ui_action == "play":
@@ -301,11 +320,11 @@ class SPHDrawer:
                 print("Simulation stepped (Step).")
             return
 
-        # Convert screen coordinates to world coordinates
+        # Convert screen coordinates to world coordinates.
         world_click = self.screen_to_world(mouse_pos)
         threshold = self.particle_radius / min(self.scale_x, self.scale_y)
 
-        # Find the clicked particle
+        # Find the clicked particle.
         clicked_particle = None
         for particle in self.particles:
             if np.linalg.norm(np.array(particle['position']) -
@@ -313,14 +332,14 @@ class SPHDrawer:
                 clicked_particle = particle
                 break
 
-        # If no particle was clicked, reset highlighting
+        # If no particle was clicked, reset highlighting.
         if clicked_particle is None:
             self.highlighted_index = None
             self.selected_particle_pos = None
             self.highlighted_neighbors = set()
             return
 
-        # Highlight the selected particle
+        # Highlight the selected particle.
         self.highlighted_index = clicked_particle['index']
         self.selected_particle_pos = clicked_particle['position']
         self.highlighted_neighbors = set(clicked_particle.get('neighbors', []))
@@ -364,8 +383,7 @@ class SPHDrawer:
                     self.handle_click(event.pos)
             self.draw_particles()
 
-            # Print particle info only if simulation is running (not paused) continuously;
-            # if paused, print only once when a step occurs.
+            # Print particle info on each frame if running; if paused, print only after a step.
             if not self.paused:
                 self.print_highlighted_particle_info()
                 self.frame_count += 1
