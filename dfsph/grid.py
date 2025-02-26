@@ -1,5 +1,9 @@
 import numpy as np
+import time
+import matplotlib.pyplot as plt
 from collections import defaultdict
+from scipy.spatial import cKDTree
+from dfsph.particles import Particles
 
 
 class Grid:
@@ -22,13 +26,22 @@ class Grid:
             list)  # Hashmap {cell_idx: [particle_indices]}
 
     def _compute_cell_index(self, position):
-        """ Returns the grid cell index (i, j) for a given position. """
+        """
+        Returns the grid cell index (i, j) for a given position.
+        
+        Note: This method is kept for compatibility with the original design.
+        """
         cell_idx = np.floor(
             (position - self.grid_origin) * self.inv_cell_size).astype(int)
         return tuple(cell_idx)
 
     def insert_particles(self, particles):
-        """ Inserts all particles into the grid. """
+        """
+        Inserts all particles into the grid.
+
+        This method is maintained for legacy purposes. The accelerated neighbor search
+        uses cKDTree instead.
+        """
         self.cells.clear()  # Reset grid
         for i in range(particles.num_particles):
             cell_idx = self._compute_cell_index(particles.position[i])
@@ -36,27 +49,18 @@ class Grid:
 
     def find_neighbors(self, particles, search_radius):
         """
-        Finds neighbors for each particle using the spatial grid.
+        Finds neighbors for each particle using scipy's cKDTree for fast spatial queries.
 
         :param particles: The Particles object.
         :param search_radius: The radius within which to search for neighbors.
         """
-        search_cells = int(np.ceil(search_radius /
-                                   self.cell_size))  # Max cells to check
-        particles.neighbors = [[] for _ in range(particles.num_particles)
-                               ]  # Reset neighbors
-
-        for i in range(particles.num_particles):
-            cell_idx = self._compute_cell_index(particles.position[i])
-
-            # Iterate over neighboring cells
-            for dx in range(-search_cells, search_cells + 1):
-                for dy in range(-search_cells, search_cells + 1):
-                    neighbor_cell = (cell_idx[0] + dx, cell_idx[1] + dy)
-                    if neighbor_cell in self.cells:
-                        for j in self.cells[neighbor_cell]:
-                            if i != j:
-                                dist_sq = np.sum((particles.position[i] -
-                                                  particles.position[j])**2)
-                                if dist_sq < search_radius**2:
-                                    particles.neighbors[i].append(j)
+        # Build the tree from particle positions
+        tree = cKDTree(particles.position)
+        # Query the tree: for each particle, find all indices within search_radius.
+        all_neighbors = tree.query_ball_point(particles.position,
+                                              search_radius)
+        # Remove self from the neighbor list if present.
+        particles.neighbors = []
+        for i, neigh in enumerate(all_neighbors):
+            filtered = [j for j in neigh if j != i]
+            particles.neighbors.append(filtered)
