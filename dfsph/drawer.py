@@ -1,8 +1,10 @@
 import os
 import pygame
 import numpy as np
+import threading
 from dfsph.drawer_ui import UIDrawer
 from dfsph.kernels import w  # Kernel functions (Numba accelerated)
+import time
 
 
 class SPHDrawer:
@@ -19,15 +21,7 @@ class SPHDrawer:
                  density_range=(500, 1500)):
         """
         Initialize the Pygame visualization for SPH particles.
-        
-        :param num_particles: Maximum number of particles to display.
-        :param grid_size: Tuple (grid_width, grid_height) defining the physical simulation area.
-        :param grid_origin: Tuple (grid_x, grid_y) defining the lower-left corner of the grid.
-        :param support_radius: The SPH support radius (h).
-        :param width: Width of the window.
-        :param height: Height of the window.
-        :param particle_radius: Radius of the particles in pixels.
-        :param density_range: Tuple (min_density, max_density) for color scaling.
+        All particle data is expected to reside in a Particles object.
         """
         pygame.init()
 
@@ -35,7 +29,7 @@ class SPHDrawer:
         self.grid_size = np.array(grid_size, dtype=float)
         self.grid_origin = np.array(grid_origin, dtype=float)
         self.cell_size = cell_size
-        self.h = support_radius  # store the support radius
+        self.h = support_radius
 
         # Set screen size based on grid size (maintaining aspect ratio).
         aspect_ratio = self.grid_size[0] / self.grid_size[1]
@@ -44,7 +38,7 @@ class SPHDrawer:
                           aspect_ratio) if aspect_ratio >= 1 else height
         self.particle_radius = particle_radius
 
-        # Compute scaling factors for world-to-screen conversion.
+        # Precompute scaling factors for world-to-screen conversion.
         self.scale_x = self.width / self.grid_size[0]
         self.scale_y = self.height / self.grid_size[1]
 
@@ -55,11 +49,13 @@ class SPHDrawer:
 
         # Colors.
         self.bg_color = (25, 25, 25)
-        self.border_color = (255, 255, 255)  # White border.
-        self.grid_color = (100, 100, 100)  # Gray grid lines.
+        self.border_color = (255, 255, 255)
+        self.grid_color = (100, 100, 100)
         self.density_range = density_range
 
-        self.particles = []  # Will be set via set_particles().
+        # Instead of copying particle data, store a reference.
+        self.particles = None
+
         self.running = False
         self.clock = pygame.time.Clock()
 
@@ -73,70 +69,71 @@ class SPHDrawer:
         # Simulation control flags.
         self.paused = False
         self.step_once = False
-        self.just_stepped = False  # Flag to indicate a step update just occurred
+        self.just_stepped = False
 
-        # For highlighting: selected particle index, its position, neighbor indices,
-        # and its force values.
+        # For highlighting.
         self.highlighted_index = None
         self.selected_particle_pos = None
         self.highlighted_neighbors = set()
-        self.selected_particle_forces = None
 
-        # Frame counter for printing.
+        # Frame counter.
         self.frame_count = 0
 
-        # Initialize a font for rendering simulation time.
+        # Font for simulation time.
         self.font = pygame.font.SysFont("Arial", 18)
 
-        # Simulation time and timestep (to be set in run()).
+        # Simulation time and timestep.
         self.sim_time = 0.0
         self.timestep = 0.0
 
+        # Pre-render grid background.
+        self.grid_surface = self._create_grid_surface()
+
+    def _create_grid_surface(self):
+        """
+        Pre-render the grid lines and border to a Surface.
+        """
+        grid_surface = pygame.Surface((self.width, self.height))
+        grid_surface.fill(self.bg_color)
+
+        num_cells_x = int(np.floor(self.grid_size[0] / self.cell_size))
+        num_cells_y = int(np.floor(self.grid_size[1] / self.cell_size))
+        top_left = self.world_to_screen(self.grid_origin)
+        bottom_right = self.world_to_screen(self.grid_origin + self.grid_size)
+
+        # Draw vertical grid lines.
+        for i in range(num_cells_x + 1):
+            world_x = self.grid_origin[0] + i * self.cell_size
+            screen_x, _ = self.world_to_screen((world_x, self.grid_origin[1]))
+            pygame.draw.line(grid_surface, self.grid_color,
+                             (screen_x, bottom_right[1]),
+                             (screen_x, top_left[1]), 1)
+
+        # Draw horizontal grid lines.
+        for j in range(num_cells_y + 1):
+            world_y = self.grid_origin[1] + j * self.cell_size
+            _, screen_y = self.world_to_screen((self.grid_origin[0], world_y))
+            pygame.draw.line(grid_surface, self.grid_color,
+                             (top_left[0], screen_y),
+                             (bottom_right[0], screen_y), 1)
+
+        # Draw border.
+        pygame.draw.rect(grid_surface, self.border_color,
+                         (top_left[0], bottom_right[1], bottom_right[0] -
+                          top_left[0], top_left[1] - bottom_right[1]), 2)
+        return grid_surface
+
     def set_particles(self, particles):
         """
-        Update the particle positions and properties from the simulation.
-        
-        :param particles: A Particles instance from dfsph.particles.
+        Instead of copying data into dictionaries, we simply store a reference
+        to the simulation's Particles object.
         """
-        n = particles.num_particles
-        # Use provided density if available; otherwise default to 0.
-        if hasattr(particles, 'density'):
-            density_arr = particles.density
-        else:
-            density_arr = np.zeros(n, dtype=np.float32)
-        # Create a list of particle dictionaries.
-        self.particles = np.array([
-            {
-                'index':
-                i,
-                'position': (particles.position[i, 0], particles.position[i,
-                                                                          1]),
-                'density':
-                density_arr[i],
-                'mass':
-                particles.mass[i],
-                'alpha':
-                particles.alpha[i],
-                'velocity': (particles.velocity[i, 0], particles.velocity[i,
-                                                                          1]),
-                'neighbors': (particles.neighbor_indices.tolist() if hasattr(
-                    particles, 'neighbor_indices') else []),
-                'type':
-                'fluid' if particles.types[i] == 0 else 'solid',
-                'forces': {
-                }  # Default empty dictionary; update if simulation computes forces.
-            } for i in range(n)
-        ])
+        self.particles = particles
 
     def world_to_screen(self, world_pos):
         """
-        Convert simulation world coordinates to screen space.
-        If world_pos contains NaN values, return a default coordinate.
-        
-        :param world_pos: 2D tuple or array of (x, y) world position.
-        :return: (x, y) screen coordinates.
+        Convert world coordinates to screen space.
         """
-        # Check if world_pos contains NaN values.
         if np.isnan(world_pos[0]) or np.isnan(world_pos[1]):
             return (-100, -100)
         screen_x = int(
@@ -148,10 +145,7 @@ class SPHDrawer:
 
     def screen_to_world(self, screen_pos):
         """
-        Convert screen coordinates to simulation world coordinates.
-        
-        :param screen_pos: (x, y) tuple from a mouse event.
-        :return: 2D numpy array of (x, y) world coordinates.
+        Convert screen coordinates to world coordinates.
         """
         x, y = screen_pos
         world_x = x / self.scale_x + self.grid_origin[0]
@@ -160,56 +154,23 @@ class SPHDrawer:
 
     def draw_grid(self):
         """
-        Draw the simulation grid with horizontal and vertical lines.
-        The grid lines are drawn every self.cell_size world units.
+        Blit the pre-rendered grid background.
         """
-        num_cells_x = int(np.floor(self.grid_size[0] / self.cell_size))
-        num_cells_y = int(np.floor(self.grid_size[1] / self.cell_size))
-
-        top_left = self.world_to_screen(self.grid_origin)
-        bottom_right = self.world_to_screen(self.grid_origin + self.grid_size)
-
-        # Draw vertical lines.
-        for i in range(num_cells_x + 1):
-            world_x = self.grid_origin[0] + i * self.cell_size
-            screen_x, _ = self.world_to_screen((world_x, self.grid_origin[1]))
-            pygame.draw.line(self.screen, self.grid_color,
-                             (screen_x, bottom_right[1]),
-                             (screen_x, top_left[1]), 1)
-
-        # Draw horizontal lines.
-        for j in range(num_cells_y + 1):
-            world_y = self.grid_origin[1] + j * self.cell_size
-            _, screen_y = self.world_to_screen((self.grid_origin[0], world_y))
-            pygame.draw.line(self.screen, self.grid_color,
-                             (top_left[0], screen_y),
-                             (bottom_right[0], screen_y), 1)
-
-        # Draw border.
-        pygame.draw.rect(self.screen, self.border_color,
-                         (top_left[0], bottom_right[1], bottom_right[0] -
-                          top_left[0], top_left[1] - bottom_right[1]), 2)
+        self.screen.blit(self.grid_surface, (0, 0))
 
     def draw_buttons(self):
         """
-        Draw the control buttons using the UI drawer.
+        Draw UI buttons.
         """
         self.ui.draw_buttons()
 
     def get_particle_color(self, density, particle_index, pos):
         """
-        Interpolates a color based on the particle's density.
-        Fluid particles are interpolated between blue (low density) and green (high density).
-        
-        :param density: The density value of the particle.
-        :param particle_index: Unique particle index.
-        :param pos: The particle's position (world coordinates).
-        :return: (R, G, B) tuple for the particle's color.
+        Compute a color for a particle based on its density and highlighting.
         """
-        # If a particle is highlighted, adjust color based on its distance to the selected particle.
         if self.highlighted_index is not None:
             if particle_index == self.highlighted_index:
-                return (255, 0, 0)  # Selected particle in red.
+                return (255, 0, 0)
             elif particle_index in self.highlighted_neighbors and self.selected_particle_pos is not None:
                 selected_pos = np.array(self.selected_particle_pos,
                                         dtype=float)
@@ -230,84 +191,65 @@ class SPHDrawer:
 
     def draw_particles(self):
         """
-        Draw all particles with colors based on density and highlighting.
-        Also draws a circle of radius 2h around the selected particle and displays the simulation time.
+        Render particles directly using the Particles object's arrays.
         """
-        self.screen.fill(self.bg_color)
-        self.draw_grid()
+        self.screen.blit(self.grid_surface, (0, 0))
+        if self.particles is None:
+            return
 
-        # Draw each particle.
-        for particle in self.particles:
-            screen_x, screen_y = self.world_to_screen(particle['position'])
-            if particle.get('type', 'fluid') == 'solid':
+        n = self.particles.num_particles
+        for i in range(n):
+            pos = self.particles.position[i]
+            screen_x, screen_y = self.world_to_screen(pos)
+            if self.particles.types[i] != 0:
                 color = (150, 75, 0)
             else:
-                color = self.get_particle_color(particle['density'],
-                                                particle['index'],
-                                                particle['position'])
+                density = self.particles.density[i]
+                color = self.get_particle_color(density, i, pos)
             pygame.draw.circle(self.screen, color, (screen_x, screen_y),
                                self.particle_radius)
 
-        # Draw a highlight circle around the selected particle.
+        # Draw a highlight circle for the selected particle.
         if self.highlighted_index is not None and self.h is not None:
-            for particle in self.particles:
-                if particle['index'] == self.highlighted_index:
-                    center = self.world_to_screen(particle['position'])
-                    scale = min(self.scale_x, self.scale_y)
-                    circle_radius = int(self.h * scale)
-                    pygame.draw.circle(self.screen, (255, 255, 255), center,
-                                       circle_radius, 2)
-                    break
-
-        # --- Draw Simulation Time counter in top left corner ---
-        sim_time_text = self.font.render(f"Sim Time: {self.sim_time:.2f} s",
-                                         True, (255, 255, 255))
-        self.screen.blit(sim_time_text, (5, 5))
-        # -------------------------------------------
+            pos = self.particles.position[self.highlighted_index]
+            center = self.world_to_screen(pos)
+            scale = min(self.scale_x, self.scale_y)
+            circle_radius = int(self.h * scale)
+            pygame.draw.circle(self.screen, (255, 255, 255), center,
+                               circle_radius, 2)
 
         self.draw_buttons()
         pygame.display.flip()
 
     def print_highlighted_particle_info(self):
         """
-        Print the selected particle's information along with the current frame count.
+        Print info of the highlighted particle directly from the Particles object.
         """
-        if self.highlighted_index is None:
+        if self.particles is None or self.highlighted_index is None:
             return
 
-        for particle in self.particles:
-            if particle['index'] == self.highlighted_index:
-                print(f"\nFrame {self.frame_count}:")
-                print(f"  Index: {particle['index']}")
-                pos = particle['position']
-                print(f"  Position: ({pos[0]:.3f}, {pos[1]:.3f})")
-                print(f"  Density: {particle['density']:.3f}")
-                print(f"  Mass: {particle['mass']:.3f}")
-                print(f"  Alpha: {particle['alpha']:.3f}")
-                vel = particle['velocity']
-                print(f"  Velocity: ({vel[0]:.3f}, {vel[1]:.3f})")
-                print(f"  Neighbors: {len(particle['neighbors'])}")
-                forces = particle.get('forces', {})
-                total_force = np.zeros(2)
-                for force_type, force_value in forces.items():
-                    formatted_force = f"{force_value[0]:.3f}, {force_value[1]:.3f}"
-                    print(
-                        f"  {force_type.capitalize()} Force: ({formatted_force})"
-                    )
-                    total_force += force_value
-                print(
-                    f"  Total Forces: ({total_force[0]:.3f}, {total_force[1]:.3f})"
-                )
-                break
+        i = self.highlighted_index
+        pos = self.particles.position[i]
+        density = self.particles.density[i]
+        mass = self.particles.mass[i]
+        alpha = self.particles.alpha[i]
+        vel = self.particles.velocity[i]
+        cnt = self.particles.neighbor_counts[i] if hasattr(
+            self.particles, 'neighbor_counts') else 0
+
+        print(f"\nFrame {self.frame_count}:")
+        print(f"  Index: {i}")
+        print(f"  Position: ({pos[0]:.3f}, {pos[1]:.3f})")
+        print(f"  Density: {density:.3f}")
+        print(f"  Mass: {mass:.3f}")
+        print(f"  Alpha: {alpha:.3f}")
+        print(f"  Velocity: ({vel[0]:.3f}, {vel[1]:.3f})")
+        print(f"  Neighbors: {cnt}")
 
     def handle_click(self, mouse_pos):
         """
-        Handle mouse click events. If a control button is clicked, perform its action.
-        Otherwise, check for particle clicks to highlight a particle and print its details.
-        
-        :param mouse_pos: (x, y) tuple from the mouse event.
+        Process mouse clicks for UI or particle selection using the Particles arrays.
         """
-        # Handle UI button clicks.
         ui_action = self.ui.handle_click(mouse_pos)
         if ui_action is not None:
             if ui_action == "play":
@@ -324,73 +266,72 @@ class SPHDrawer:
                 print("Simulation stepped (Step).")
             return
 
-        # Convert screen coordinates to world coordinates.
         world_click = self.screen_to_world(mouse_pos)
         threshold = self.particle_radius / min(self.scale_x, self.scale_y)
+        if self.particles is None:
+            return
 
-        # Find the clicked particle.
-        clicked_particle = None
-        for particle in self.particles:
-            if np.linalg.norm(np.array(particle['position']) -
-                              world_click) <= threshold:
-                clicked_particle = particle
+        clicked_index = None
+        for i in range(self.particles.num_particles):
+            pos = self.particles.position[i]
+            if np.linalg.norm(np.array(pos) - world_click) <= threshold:
+                clicked_index = i
                 break
 
-        # If no particle was clicked, reset highlighting.
-        if clicked_particle is None:
+        if clicked_index is None:
             self.highlighted_index = None
             self.selected_particle_pos = None
             self.highlighted_neighbors = set()
             return
 
-        # Highlight the selected particle.
-        self.highlighted_index = clicked_particle['index']
-        self.selected_particle_pos = clicked_particle['position']
-        self.highlighted_neighbors = set(clicked_particle.get('neighbors', []))
+        self.highlighted_index = clicked_index
+        self.selected_particle_pos = self.particles.position[clicked_index]
+        if (hasattr(self.particles, 'neighbor_indices')
+                and hasattr(self.particles, 'neighbor_starts')
+                and hasattr(self.particles, 'neighbor_counts')):
+            start = self.particles.neighbor_starts[clicked_index]
+            cnt = self.particles.neighbor_counts[clicked_index]
+            neighbors = self.particles.neighbor_indices[start:start + cnt]
+            self.highlighted_neighbors = set(neighbors.tolist())
+        else:
+            self.highlighted_neighbors = set()
 
         print("\nParticle clicked:")
-        print(f"  Index: {clicked_particle['index']}")
-        pos = clicked_particle['position']
+        print(f"  Index: {clicked_index}")
+        pos = self.particles.position[clicked_index]
         print(f"  Position: ({pos[0]:.3f}, {pos[1]:.3f})")
-        print(f"  Density: {clicked_particle['density']:.3f}")
-        print(f"  Mass: {clicked_particle['mass']:.3f}")
-        print(f"  Alpha: {clicked_particle['alpha']:.3f}")
-        vel = clicked_particle['velocity']
+        print(f"  Density: {self.particles.density[clicked_index]:.3f}")
+        print(f"  Mass: {self.particles.mass[clicked_index]:.3f}")
+        print(f"  Alpha: {self.particles.alpha[clicked_index]:.3f}")
+        vel = self.particles.velocity[clicked_index]
         print(f"  Velocity: ({vel[0]:.3f}, {vel[1]:.3f})")
-        print(f"  Neighbors: {len(clicked_particle['neighbors'])}")
-        forces = clicked_particle.get('forces', {})
-        total_force = np.zeros(2)
-        for force_type, force_value in forces.items():
-            formatted_force = f"{force_value[0]:.3f}, {force_value[1]:.3f}"
-            print(f"  {force_type.capitalize()} Force: ({formatted_force})")
-            total_force += force_value
-        print(f"  Total Forces: ({total_force[0]:.3f}, {total_force[1]:.3f})")
+        cnt = self.particles.neighbor_counts[clicked_index] if hasattr(
+            self.particles, 'neighbor_counts') else 0
+        print(f"  Neighbors: {cnt}")
 
-    def run(self, update_func, timestep=0.05):
+    def run(self, update_func, timestep=0.033):
         """
-        Start the Pygame event loop to visualize the simulation.
-        
-        :param update_func: Function to update simulation at each timestep.
-        :param timestep: Time interval (seconds) between each update.
+        Start the Pygame event loop and run the simulation update in a separate thread.
         """
         self.running = True
         self.timestep = timestep
+
+        # Launch the simulation update thread.
+        sim_thread = threading.Thread(target=self.simulation_loop,
+                                      args=(update_func, ),
+                                      daemon=True)
+        sim_thread.start()
+
         while self.running:
+            frame_start = time.perf_counter()
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(event.pos)
-            # Update simulation if not paused (or a step is requested)
-            if not self.paused or self.step_once:
-                update_func()
-                self.sim_time += self.timestep
-                if self.step_once:
-                    self.step_once = False
-                    self.just_stepped = True
             self.draw_particles()
 
-            # Print particle info on each frame if running; if paused, print only after a step.
             if not self.paused:
                 self.print_highlighted_particle_info()
                 self.frame_count += 1
@@ -399,19 +340,20 @@ class SPHDrawer:
                 self.frame_count += 1
                 self.just_stepped = False
 
+            frame_end = time.perf_counter()
+            elapsed_time = (frame_end - frame_start) * 1000
+            # print(f"Frame rendered in {elapsed_time:.3f} ms")
             self.clock.tick(30)
 
         pygame.quit()
 
     def simulation_loop(self, update_func):
         """
-        Runs the simulation update function in a separate thread.
-        Each update increments the simulation time by the timestep.
+        Run the simulation update function in a separate thread.
         """
         while self.running:
             if not self.paused or self.step_once:
                 update_func()
-                self.sim_time += self.timestep
                 if self.step_once:
                     self.step_once = False
                     self.just_stepped = True

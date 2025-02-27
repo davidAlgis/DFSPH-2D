@@ -3,12 +3,10 @@ import numpy as np
 from dfsph.sim import DFSPHSim
 from dfsph.drawer import SPHDrawer
 from dfsph.particle_init import particles_init
+import time
 
 
 def str2bool(v):
-    """
-    Converts a string argument to a boolean value.
-    """
     if isinstance(v, bool):
         return v
     if v.lower() in ('yes', 'true', 't', 'y', '1'):
@@ -20,10 +18,9 @@ def str2bool(v):
 
 
 def main():
-    # Argument parser for command-line options.
+    # Parse command-line arguments.
     parser = argparse.ArgumentParser(
         description="Launch a DFSPH fluid simulation.")
-
     # Simulation parameters.
     parser.add_argument("-r",
                         "--support_radius",
@@ -41,7 +38,6 @@ def main():
         type=int,
         default=1000,
         help="Number of simulation steps before relaunch (default: 1000)")
-
     # Box parameters for particle initialization.
     parser.add_argument(
         "--box_origin",
@@ -54,13 +50,12 @@ def main():
         "--box_size",
         type=float,
         nargs=2,
-        default=[2, 2],
-        help="Size of the box where particles are initialized (default: 2 2)")
+        default=[1, 1],
+        help="Size of the box where particles are initialized (default: 1 1)")
     parser.add_argument("--rest_density",
                         type=float,
-                        default=102.0,
+                        default=1027.0,
                         help="Rest density of the fluid (default: 102.0)")
-
     # Grid parameters.
     parser.add_argument(
         "--grid_size",
@@ -74,7 +69,6 @@ def main():
         nargs=2,
         default=[0.0, 0.0],
         help="Position of the grid in simulation space (default: 0.0 0.0)")
-
     # Visualization option.
     parser.add_argument(
         "-v",
@@ -83,10 +77,9 @@ def main():
         default=True,
         help="Enable real-time visualization using Pygame (default: enabled)")
 
-    # Parse command-line arguments.
     args = parser.parse_args()
 
-    # Initialize particles using the updated particle initializer.
+    # Initialize particles.
     particles = particles_init(grid_origin=args.grid_origin,
                                grid_size=args.grid_size,
                                h=args.support_radius,
@@ -95,7 +88,7 @@ def main():
                                box_origin=args.box_origin,
                                box_size=args.box_size)
     num_particles = particles.num_particles
-    print(f"Launch simulation DFSPH with {num_particles} particles...")
+    print(f"Launching DFSPH simulation with {num_particles} particles...")
     cell_size = args.support_radius
 
     # Create the simulation instance.
@@ -114,44 +107,19 @@ def main():
                            grid_size=args.grid_size,
                            support_radius=args.support_radius,
                            cell_size=cell_size)
+        # Set the drawer to work directly with the simulation's Particles object.
+        drawer.set_particles(sim.particles)
 
-        # Simulation step counter.
-        step_counter = 0
-
-        # Define an update function for simulation.
+        # Define the simulation update function.
         def update_sim():
-            nonlocal sim, step_counter
-            # Update the simulation.
             sim.update()
-            step_counter += 1
-
-            # Relaunch simulation if step limit is reached.
-            if step_counter >= args.steps:
-                print(f"Reached {args.steps} steps. Relaunching simulation...")
-                new_particles = particles_init(grid_origin=args.grid_origin,
-                                               grid_size=args.grid_size,
-                                               h=args.support_radius,
-                                               rest_density=args.rest_density,
-                                               spacing=args.support_radius /
-                                               2.5,
-                                               box_origin=args.box_origin,
-                                               box_size=args.box_size)
-                sim = DFSPHSim(new_particles,
-                               h=args.support_radius,
-                               dt=args.timestep,
-                               grid_origin=tuple(args.grid_origin),
-                               grid_size=tuple(args.grid_size),
-                               cell_size=cell_size,
-                               rest_density=args.rest_density)
-                step_counter = 0
-
-            # Update the drawer with the latest particle data.
-            drawer.set_particles(sim.particles)
 
         # Run the visualization loop.
         drawer.run(update_sim)
     else:
-        print(f"Starting simulation with {num_particles} particles...")
+        print(
+            f"Starting simulation without visualization with {num_particles} particles..."
+        )
         for i in range(args.steps):
             sim.update()
             if i % 100 == 0:
