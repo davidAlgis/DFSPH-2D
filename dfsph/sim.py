@@ -1,6 +1,6 @@
 import numpy as np
 from dfsph.grid import Grid
-from dfsph.particles import Particles  # Now directly using SoA structure
+from dfsph.particles import Particles  # SoA structure
 from dfsph.kernels import w, grad_w
 import dfsph.sph_accelerated as sphjit
 
@@ -107,17 +107,33 @@ class DFSPHSim:
         self.particles.surface_tension_forces[:] = surf_forces
 
     def predict_intermediate_velocity(self):
-        self.particles.external_forces[:] = self.particles.mass[:, np.
-                                                                newaxis] * self.gravity
+        """
+        Update velocities only for fluid particles (type 0).
+        Solid particles remain completely static.
+        """
+        # Create a boolean mask for fluid particles.
+        fluid_mask = (self.particles.types == 0)
+        # Set external forces only for fluid.
+        self.particles.external_forces[fluid_mask] = (
+            self.particles.mass[fluid_mask, np.newaxis] * self.gravity)
+        # Compute total force (all forces are computed, but only update fluid).
         total_force = (self.particles.viscosity_forces +
                        self.particles.pressure_forces +
                        self.particles.surface_tension_forces +
                        self.particles.external_forces)
-        acceleration = total_force / self.particles.mass[:, np.newaxis]
-        self.particles.velocity[:] += acceleration * self.dt
+        # Update velocity only for fluid particles.
+        self.particles.velocity[fluid_mask] += (
+            total_force[fluid_mask] /
+            self.particles.mass[fluid_mask, np.newaxis]) * self.dt
 
     def integrate(self):
-        self.particles.position[:] += self.particles.velocity * self.dt
+        """
+        Update positions only for fluid particles.
+        Solid particles remain static.
+        """
+        fluid_mask = (self.particles.types == 0)
+        self.particles.position[
+            fluid_mask] += self.particles.velocity[fluid_mask] * self.dt
 
     def apply_boundary_penalty(self, collider_damping=0.5):
         bottom, top = self.get_bottom_and_top()
@@ -161,8 +177,6 @@ class DFSPHSim:
         self.particles.surface_tension_forces.fill(0)
 
     def update(self):
-        start_time = time.perf_counter()  # Start timing
-
         self.adapt_dt_for_cfl()
         self.reset_forces()
         self.find_neighbors()  # Update neighbor info once per step
@@ -175,8 +189,3 @@ class DFSPHSim:
         self.predict_intermediate_velocity()
         self.integrate()
         self.apply_boundary_penalty()
-
-        end_time = time.perf_counter()  # End timing
-        elapsed_time = (end_time -
-                        start_time) * 1000  # Convert to milliseconds
-        print(f"Update step completed in {elapsed_time:.3f} ms")

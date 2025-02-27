@@ -50,7 +50,7 @@ def main():
         "--box_size",
         type=float,
         nargs=2,
-        default=[1, 1],
+        default=[2, 2],
         help="Size of the box where particles are initialized (default: 1 1)")
     parser.add_argument("--rest_density",
                         type=float,
@@ -84,7 +84,7 @@ def main():
                                grid_size=args.grid_size,
                                h=args.support_radius,
                                rest_density=args.rest_density,
-                               spacing=args.support_radius / 2.5,
+                               spacing=args.support_radius / 3,
                                box_origin=args.box_origin,
                                box_size=args.box_size)
     num_particles = particles.num_particles

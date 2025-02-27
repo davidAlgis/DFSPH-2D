@@ -323,7 +323,6 @@ class SPHDrawer:
         sim_thread.start()
 
         while self.running:
-            frame_start = time.perf_counter()
 
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -339,10 +338,6 @@ class SPHDrawer:
                 self.print_highlighted_particle_info()
                 self.frame_count += 1
                 self.just_stepped = False
-
-            frame_end = time.perf_counter()
-            elapsed_time = (frame_end - frame_start) * 1000
-            # print(f"Frame rendered in {elapsed_time:.3f} ms")
             self.clock.tick(30)
 
         pygame.quit()
