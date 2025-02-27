@@ -1,7 +1,6 @@
 import os
 import pygame
 import numpy as np
-import threading
 from dfsph.drawer_ui import UIDrawer
 from dfsph.kernels import w  # Kernel functions (Numba accelerated)
 
@@ -106,24 +105,28 @@ class SPHDrawer:
         else:
             density_arr = np.zeros(n, dtype=np.float32)
         # Create a list of particle dictionaries.
-        self.particles = []
-        for i in range(n):
-            particle_dict = {
-                'index': i,
+        self.particles = np.array([
+            {
+                'index':
+                i,
                 'position': (particles.position[i, 0], particles.position[i,
                                                                           1]),
-                'density': density_arr[i],
-                'mass': particles.mass[i],
-                'alpha': particles.alpha[i],
+                'density':
+                density_arr[i],
+                'mass':
+                particles.mass[i],
+                'alpha':
+                particles.alpha[i],
                 'velocity': (particles.velocity[i, 0], particles.velocity[i,
                                                                           1]),
-                'neighbors': particles.neighbors[i],
-                'type': 'fluid' if particles.types[i] == 0 else 'solid',
+                'neighbors': (particles.neighbor_indices.tolist() if hasattr(
+                    particles, 'neighbor_indices') else []),
+                'type':
+                'fluid' if particles.types[i] == 0 else 'solid',
                 'forces': {
                 }  # Default empty dictionary; update if simulation computes forces.
-            }
-            self.particles.append(particle_dict)
-        self.particles = np.array(self.particles)
+            } for i in range(n)
+        ])
 
     def world_to_screen(self, world_pos):
         """
@@ -368,21 +371,23 @@ class SPHDrawer:
         Start the Pygame event loop to visualize the simulation.
         
         :param update_func: Function to update simulation at each timestep.
-        :param timestep: Time interval (seconds) between each simulation update.
+        :param timestep: Time interval (seconds) between each update.
         """
         self.running = True
         self.timestep = timestep
-        sim_thread = threading.Thread(target=self.simulation_loop,
-                                      args=(update_func, ),
-                                      daemon=True)
-        sim_thread.start()
-
         while self.running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(event.pos)
+            # Update simulation if not paused (or a step is requested)
+            if not self.paused or self.step_once:
+                update_func()
+                self.sim_time += self.timestep
+                if self.step_once:
+                    self.step_once = False
+                    self.just_stepped = True
             self.draw_particles()
 
             # Print particle info on each frame if running; if paused, print only after a step.
