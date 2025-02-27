@@ -1,6 +1,5 @@
 import numpy as np
 import time
-import matplotlib.pyplot as plt
 from collections import defaultdict
 from scipy.spatial import cKDTree
 from dfsph.particles import Particles
