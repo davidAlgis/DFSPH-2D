@@ -96,13 +96,14 @@ class Particles:
         """
         total_neighbors = sum(len(neigh) for neigh in neighbors_list)
         self.neighbor_indices = np.zeros(total_neighbors, dtype=np.int32)
-
-        index = 0
-        for i, neighbors in enumerate(neighbors_list):
-            self.neighbor_starts[i] = index
-            self.neighbor_counts[i] = len(neighbors)
-            self.neighbor_indices[index:index + len(neighbors)] = neighbors
-            index += len(neighbors)
+        self.neighbor_counts = np.zeros(self.num_particles, dtype=np.int32)
+        self.neighbor_starts = np.zeros(self.num_particles, dtype=np.int32)
+        idx = 0
+        for i, neigh in enumerate(neighbors_list):
+            self.neighbor_starts[i] = idx
+            self.neighbor_counts[i] = len(neigh)
+            self.neighbor_indices[idx:idx + len(neigh)] = neigh
+            idx += len(neigh)
 
     def __repr__(self):
         return f"Particles(num={self.num_particles})"

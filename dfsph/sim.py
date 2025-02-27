@@ -179,7 +179,9 @@ class DFSPHSim:
         Find neighbors for each particle using the grid system.
         Updates the neighbor data structure in Particles directly.
         """
-        self.grid.find_neighbors(self.particles, self.h)
+        self.grid.insert_particles(self.particles)
+        neighbors_list = self.grid.find_neighbors(self.particles, self.h)
+        self.particles.update_neighbors(neighbors_list)
 
     def adapt_dt_for_cfl(self):
         """
