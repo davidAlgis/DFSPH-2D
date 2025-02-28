@@ -56,7 +56,7 @@ class DFSPHSim:
         self.particles.alpha[:] = alphas
         self.mean_density = np.mean(densities)
 
-    def compute_pressure(self, B=1000.0, gamma=7):
+    def compute_pressure_wcsph(self, B=1000.0, gamma=7):
         self.particles.pressure[:] = B * (
             (self.particles.density / self.rest_density)**gamma - 1)
 
@@ -70,7 +70,7 @@ class DFSPHSim:
         self.particles.mass[self.particles.types == 1] = new_masses[
             self.particles.types == 1]
 
-    def compute_viscosity_forces_updated(self):
+    def compute_viscosity_forces(self):
         vis_forces = sphjit.compute_viscosity_forces_updated_numba(
             self.particles.position.astype(np.float64),
             self.particles.velocity.astype(np.float64),
@@ -86,7 +86,7 @@ class DFSPHSim:
         )
         self.particles.viscosity_forces[:] = vis_forces
 
-    def compute_pressure_forces_updated(self):
+    def compute_pressure_forces_wcsph(self):
         p_forces = sphjit.compute_pressure_forces_updated_numba(
             self.particles.position.astype(np.float64),
             (self.particles.types == 1).astype(np.int32),
@@ -96,7 +96,7 @@ class DFSPHSim:
             self.h)
         self.particles.pressure_forces[:] = p_forces
 
-    def compute_surface_tension_forces_updated(self):
+    def compute_surface_tension_forces(self):
         surf_forces = sphjit.compute_surface_tension_forces_updated_numba(
             self.particles.position.astype(np.float64),
             self.particles.velocity.astype(np.float64),
@@ -179,13 +179,13 @@ class DFSPHSim:
     def update(self):
         self.adapt_dt_for_cfl()
         self.reset_forces()
-        self.find_neighbors()  # Update neighbor info once per step
+        self.find_neighbors()
         self.compute_density_and_alpha()
         self.update_mass_solid()
-        self.compute_viscosity_forces_updated()
-        self.compute_pressure()
-        self.compute_pressure_forces_updated()
-        self.compute_surface_tension_forces_updated()
+        self.compute_viscosity_forces()
+        self.compute_pressure_wcsph()
+        self.compute_pressure_forces_wcsph()
+        self.compute_surface_tension_forces()
         self.predict_intermediate_velocity()
         self.integrate()
         self.apply_boundary_penalty()
