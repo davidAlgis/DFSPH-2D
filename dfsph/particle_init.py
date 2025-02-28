@@ -35,7 +35,7 @@ def particles_init(grid_origin, grid_size, h, rest_density, spacing,
 
     # Add boundary particles (solid static) along the simulation domain boundary.
     particles = add_boundary_particles(particles, grid_origin, grid_size,
-                                       spacing / 4, mass, h)
+                                       spacing, mass, h)
 
     return particles
 
