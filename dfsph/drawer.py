@@ -223,7 +223,8 @@ class SPHDrawer:
 
     def print_highlighted_particle_info(self):
         """
-        Print info of the highlighted particle directly from the Particles object.
+        Print info of the highlighted particle directly from the Particles object,
+        including all force components.
         """
         if self.particles is None or self.highlighted_index is None:
             return
@@ -237,6 +238,13 @@ class SPHDrawer:
         cnt = self.particles.neighbor_counts[i] if hasattr(
             self.particles, 'neighbor_counts') else 0
 
+        # Retrieve force vectors from the particle arrays.
+        vf = self.particles.viscosity_forces[i]
+        ef = self.particles.external_forces[i]
+        pf = self.particles.pressure_forces[i]
+        sf = self.particles.surface_tension_forces[i]
+        total_force = vf + ef + pf + sf
+
         print(f"\nFrame {self.frame_count}:")
         print(f"  Index: {i}")
         print(f"  Position: ({pos[0]:.3f}, {pos[1]:.3f})")
@@ -245,6 +253,11 @@ class SPHDrawer:
         print(f"  Alpha: {alpha:.3f}")
         print(f"  Velocity: ({vel[0]:.3f}, {vel[1]:.3f})")
         print(f"  Neighbors: {cnt}")
+        print(f"  Viscosity Force: ({vf[0]:.3f}, {vf[1]:.3f})")
+        print(f"  External Force: ({ef[0]:.3f}, {ef[1]:.3f})")
+        print(f"  Pressure Force: ({pf[0]:.3f}, {pf[1]:.3f})")
+        print(f"  Surface Tension Force: ({sf[0]:.3f}, {sf[1]:.3f})")
+        print(f"  Total Force: ({total_force[0]:.3f}, {total_force[1]:.3f})")
 
     def handle_click(self, mouse_pos):
         """
@@ -308,6 +321,17 @@ class SPHDrawer:
         cnt = self.particles.neighbor_counts[clicked_index] if hasattr(
             self.particles, 'neighbor_counts') else 0
         print(f"  Neighbors: {cnt}")
+        # Also print forces immediately upon click.
+        vf = self.particles.viscosity_forces[clicked_index]
+        ef = self.particles.external_forces[clicked_index]
+        pf = self.particles.pressure_forces[clicked_index]
+        sf = self.particles.surface_tension_forces[clicked_index]
+        total_force = vf + ef + pf + sf
+        print(f"  Viscosity Force: ({vf[0]:.3f}, {vf[1]:.3f})")
+        print(f"  External Force: ({ef[0]:.3f}, {ef[1]:.3f})")
+        print(f"  Pressure Force: ({pf[0]:.3f}, {pf[1]:.3f})")
+        print(f"  Surface Tension Force: ({sf[0]:.3f}, {sf[1]:.3f})")
+        print(f"  Total Force: ({total_force[0]:.3f}, {total_force[1]:.3f})")
 
     def run(self, update_func, timestep=0.033):
         """
