@@ -215,18 +215,74 @@ class DFSPHSim:
 
             self.adapt_velocity_density()
 
+    def compute_density_derivative(self):
+        """Calls the Numba function to compute density derivative for each particle."""
+        dfsph_pressure_solvers.compute_density_derivative_numba(
+            self.particles.density, self.particles.position,
+            self.particles.velocity, self.particles.mass, self.particles.types,
+            self.particles.density_derivative, self.particles.neighbor_starts,
+            self.particles.neighbor_counts, self.particles.neighbor_indices,
+            self.dt, self.h, self.rest_density)
+
+    def adapt_velocity_divergence_free(self):
+        """Calls the Numba function to adapt velocities for divergence-free constraint."""
+        dfsph_pressure_solvers.adapt_velocity_divergence_free_numba(
+            self.particles.position, self.particles.velocity,
+            self.particles.density, self.particles.alpha, self.particles.mass,
+            self.particles.types, self.particles.density_derivative,
+            self.particles.neighbor_starts, self.particles.neighbor_counts,
+            self.particles.neighbor_indices, self.dt, self.h,
+            self.rest_density)
+
+    def solve_divergence_free(self):
+        """Iteratively enforces a divergence-free velocity field."""
+        # Set divergence threshold and maximum iterations similar to C++ implementation
+        threshold_divergence = 1e-3 * self.rest_density / self.dt
+        max_iter = 24
+        iter_count = 0
+        density_derivative_avg = np.inf
+
+        while (iter_count < max_iter) and (abs(density_derivative_avg)
+                                           > threshold_divergence):
+            # Update density derivative on each particle
+            self.compute_density_derivative()
+
+            # Adapt velocities to correct divergence
+            self.adapt_velocity_divergence_free()
+
+            # Compute average density derivative for fluid particles
+            fluid_mask = (self.particles.types == 0)
+            density_derivative_avg = np.mean(
+                np.abs(self.particles.density_derivative[fluid_mask]))
+            print(
+                f"[Divergence Solver] Iteration {iter_count + 1}: density derivative avg = {density_derivative_avg:.3f}"
+            )
+            iter_count += 1
+
     def update(self):
+        """
+        Simulation update:
+          1. Adapt dt based on CFL.
+          2. Reset forces.
+          3. Compute density and alpha.
+          4. Compute viscosity forces.
+          5. Predict intermediate velocity (using external forces).
+          6. Apply constant density solver to enforce incompressibility.
+          7. Apply divergence-free solver to correct velocity divergence.
+          8. Integrate positions.
+          9. Apply boundary conditions/penalties.
+         10. Update neighbor search and density/alpha after position update.
+         11. (Optional) Placeholder for further corrections.
+        """
         self.adapt_dt_for_cfl()
         self.reset_forces()
-        # self.find_neighbors()
         self.compute_density_and_alpha()
-        # self.update_mass_solid()
         self.compute_viscosity_forces()
 
         # Predict velocity based on external forces (fluid only)
         self.predict_intermediate_velocity()
 
-        # Constant density solver replaces the traditional pressure force computation:
+        # Apply constant density solver
         self.solve_constant_density()
 
         # Integrate positions using the corrected velocities
@@ -239,5 +295,5 @@ class DFSPHSim:
         self.find_neighbors()
         self.compute_density_and_alpha()
 
-        # (Optional) Placeholder for divergence correction step
-        # self.correct_divergence_error()
+        # (Optional) Placeholder for further corrections
+        # self.solve_divergence_free()
