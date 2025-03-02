@@ -197,7 +197,8 @@ class DFSPHSim:
 
     def solve_constant_density(self):
         """Iteratively enforces incompressibility via density correction."""
-        for iteration in range(24):
+        max_iter = 24
+        for iteration in range(max_iter):
             self.compute_intermediate_density()
 
             # Compute maximum density error for logging
@@ -206,14 +207,15 @@ class DFSPHSim:
             max_error = np.max(density_errors)
             avg_error = np.mean(density_errors)
 
-            print(
-                f"[Density Solver] Iteration {iteration + 1}: max error = {max_error:.3f}, avg error = {avg_error:.3f}"
-            )
-
             if max_error < 1e-3 * self.rest_density:
                 break  # Converged
 
             self.adapt_velocity_density()
+
+        if iteration >= max_iter - 1:
+            print(
+                f"[Density Solver]: Max iteration reached ! max error = {max_error:.3f}, avg error = {avg_error:.3f}"
+            )
 
     def compute_density_derivative(self):
         """Calls the Numba function to compute density derivative for each particle."""
@@ -254,26 +256,14 @@ class DFSPHSim:
             fluid_mask = (self.particles.types == 0)
             density_derivative_avg = np.mean(
                 np.abs(self.particles.density_derivative[fluid_mask]))
-            print(
-                f"[Divergence Solver] Iteration {iter_count + 1}: density derivative avg = {density_derivative_avg:.3f}"
-            )
+
             iter_count += 1
+        if iter_count >= max_iter:
+            print(
+                f"[Divergence Solver]: Max iteration reached ! density derivative avg = {density_derivative_avg:.3f}"
+            )
 
     def update(self):
-        """
-        Simulation update:
-          1. Adapt dt based on CFL.
-          2. Reset forces.
-          3. Compute density and alpha.
-          4. Compute viscosity forces.
-          5. Predict intermediate velocity (using external forces).
-          6. Apply constant density solver to enforce incompressibility.
-          7. Apply divergence-free solver to correct velocity divergence.
-          8. Integrate positions.
-          9. Apply boundary conditions/penalties.
-         10. Update neighbor search and density/alpha after position update.
-         11. (Optional) Placeholder for further corrections.
-        """
         self.adapt_dt_for_cfl()
         self.reset_forces()
         self.compute_density_and_alpha()
@@ -295,5 +285,4 @@ class DFSPHSim:
         self.find_neighbors()
         self.compute_density_and_alpha()
 
-        # (Optional) Placeholder for further corrections
-        # self.solve_divergence_free()
+        self.solve_divergence_free()
