@@ -266,8 +266,9 @@ class DFSPHSim:
     def update(self):
         self.adapt_dt_for_cfl()
         self.reset_forces()
-        self.compute_density_and_alpha()
+
         self.compute_viscosity_forces()
+        # self.compute_surface_tension_forces()
 
         # Predict velocity based on external forces (fluid only)
         self.predict_intermediate_velocity()
