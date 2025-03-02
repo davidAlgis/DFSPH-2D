@@ -95,52 +95,25 @@ def adapt_velocity_divergence_free_numba(position, velocity, density, alpha,
         if types[i] != 0:
             continue
         rho_i = density[i]
-        # Compute kappa for divergence correction using the density derivative
-        # For simplicity, we use alpha and the (precomputed) density derivative.
-        # Here, we assume that compute_density_derivative_numba has been called
-        # and the result stored externally, but for now, we compute on the fly.
-        density_deriv = 0.0
-        for idx in range(neighbor_starts[i],
-                         neighbor_starts[i] + neighbor_counts[i]):
-            j = neighbor_indices[idx]
-            gradwij = grad_w(position[i], position[j], h)
-            vij0 = velocity[i, 0] - velocity[j, 0]
-            vij1 = velocity[i, 1] - velocity[j, 1]
-            density_deriv += mass[i] * (vij0 * gradwij[0] + vij1 * gradwij[1])
-        kappaDivergenceI = density_deriv * alpha[i] / dt
-        kappaDivergenceIDivRhoI = kappaDivergenceI / rho_i
+
+        kappaI = density_derivative[i] * alpha[i] / dt
+        kappaIDivRhoI = kappaI / rho_i
         vel_corr0 = 0.0
         vel_corr1 = 0.0
         for idx in range(neighbor_starts[i],
                          neighbor_starts[i] + neighbor_counts[i]):
             j = neighbor_indices[idx]
             gradwij = grad_w(position[i], position[j], h)
-            if types[i] == 0:
-                if types[j] == 0:
-                    rho_j = density[j]
-                    density_deriv_j = 0.0
-                    for idx2 in range(neighbor_starts[j],
-                                      neighbor_starts[j] + neighbor_counts[j]):
-                        k = neighbor_indices[idx2]
-                        if j == k:
-                            continue
-                        grad2 = grad_w(position[j], position[k], h)
-                        diff0 = velocity[j, 0] - velocity[k, 0]
-                        diff1 = velocity[j, 1] - velocity[k, 1]
-                        density_deriv_j += mass[j] * (diff0 * grad2[0] +
-                                                      diff1 * grad2[1])
-                    kappaDivergenceJ = density_deriv_j * alpha[j] / dt
-                    kappaDivergenceJDivRhoJ = kappaDivergenceJ / rho_j
-                    vel_corr0 += mass[i] * (
-                        kappaDivergenceIDivRhoI +
-                        kappaDivergenceJDivRhoJ) * gradwij[0]
-                    vel_corr1 += mass[i] * (
-                        kappaDivergenceIDivRhoI +
-                        kappaDivergenceJDivRhoJ) * gradwij[1]
-                else:
-                    vel_corr0 += (mass[j] /
-                                  rho_i) * kappaDivergenceI * gradwij[0]
-                    vel_corr1 += (mass[j] /
-                                  rho_i) * kappaDivergenceI * gradwij[1]
+
+            if types[j] == 0:
+                kappaJ = density_derivative[j] * alpha[j] / dt
+                kappaJDivRhoJ = kappaJ / density[j]
+                scalar = mass[i] * (kappaIDivRhoI + kappaJDivRhoJ)
+                vel_corr0 += scalar * gradwij[0]
+                vel_corr1 += scalar * gradwij[1]
+            else:
+                scalar = (mass[j] / rho_i) * kappaI
+                vel_corr0 += scalar * gradwij[0]
+                vel_corr1 += scalar * gradwij[1]
         velocity[i, 0] -= dt * vel_corr0
         velocity[i, 1] -= dt * vel_corr1
