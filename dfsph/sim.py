@@ -3,6 +3,7 @@ from dfsph.grid import Grid
 from dfsph.particles import Particles  # SoA structure
 from dfsph.kernels import w, grad_w
 import dfsph.sph_accelerated as sphjit
+import dfsph.dfsph_pressure_solvers as dfsph_pressure_solvers
 
 # Constants for force types
 PRESSURE = 0
@@ -174,72 +175,24 @@ class DFSPHSim:
         self.particles.pressure_forces.fill(0)
         self.particles.surface_tension_forces.fill(0)
 
-    # --- New Functions for Constant Density Solver ---
-
     def compute_intermediate_density(self):
-        """Computes the predicted density before correction is applied."""
-        density_intermediate = np.copy(self.particles.density)
-        fluid_mask = (self.particles.types == 0)
-
-        for i in np.where(fluid_mask)[0]:
-            sum_fluid, sum_solid = 0.0, 0.0
-            pos_i = self.particles.position[i]
-            vel_i = self.particles.velocity[i]
-
-            start = self.particles.neighbor_starts[i]
-            count = self.particles.neighbor_counts[i]
-            for idx in range(start, start + count):
-                j = self.particles.neighbor_indices[idx]
-                if i == j:
-                    continue
-
-                pos_j = self.particles.position[j]
-                vel_j = self.particles.velocity[j]
-                grad = grad_w(pos_i, pos_j, self.h)
-                velocity_diff = np.dot(vel_i - vel_j, grad)
-
-                if self.particles.types[j] == 0:  # Fluid neighbor
-                    sum_fluid += velocity_diff
-                else:  # Solid neighbor
-                    sum_solid += self.particles.mass[j] * velocity_diff
-
-            density_intermediate[i] = max(
-                self.particles.density[i] + self.dt *
-                (self.particles.mass[i] * sum_fluid + sum_solid),
-                self.rest_density)
-        return density_intermediate
+        """Wrapper that calls the Numba-parallelized intermediate density computation."""
+        return dfsph_pressure_solvers.compute_intermediate_density_numba(
+            self.particles.density, self.particles.position,
+            self.particles.velocity, self.particles.mass, self.particles.types,
+            self.particles.neighbor_starts, self.particles.neighbor_counts,
+            self.particles.neighbor_indices, self.dt, self.h,
+            self.rest_density)
 
     def adapt_velocity_density(self, density_intermediate):
-        """Adjusts particle velocities to maintain constant density."""
-        fluid_mask = (self.particles.types == 0)
-        for i in np.where(fluid_mask)[0]:
-            rho_i = self.particles.density[i]
-            kappa_i = (density_intermediate[i] - self.rest_density
-                       ) * self.particles.alpha[i] / (self.dt**2)
-            kappa_div_rho_i = kappa_i / rho_i
-
-            velocity_correction = np.zeros(2, dtype=np.float64)
-
-            start = self.particles.neighbor_starts[i]
-            count = self.particles.neighbor_counts[i]
-            for idx in range(start, start + count):
-                j = self.particles.neighbor_indices[idx]
-                if i == j:
-                    continue
-
-                grad = grad_w(self.particles.position[i],
-                              self.particles.position[j], self.h)
-
-                if self.particles.types[j] == 0:  # Fluid neighbor
-                    rho_j = self.particles.density[j]
-                    kappa_j = (density_intermediate[j] - self.rest_density
-                               ) * self.particles.alpha[j] / (self.dt**2)
-                    velocity_correction += self.particles.mass[i] * (
-                        kappa_div_rho_i + kappa_j / rho_j) * grad
-                else:  # Solid neighbor
-                    velocity_correction += 2.0 * self.particles.mass[
-                        j] * kappa_div_rho_i * grad
-            self.particles.velocity[i] -= self.dt * velocity_correction
+        """Wrapper that calls the Numba-parallelized velocity adaptation."""
+        dfsph_pressure_solvers.adapt_velocity_density_numba(
+            self.particles.position, self.particles.velocity,
+            self.particles.density, self.particles.alpha, density_intermediate,
+            self.particles.mass, self.particles.types,
+            self.particles.neighbor_starts, self.particles.neighbor_counts,
+            self.particles.neighbor_indices, self.dt, self.h,
+            self.rest_density)
 
     def solve_constant_density(self):
         """Iteratively enforces incompressibility via density correction."""
@@ -259,8 +212,6 @@ class DFSPHSim:
                 break  # Converged
 
             self.adapt_velocity_density(density_intermediate)
-
-    # --- Updated Update Method Based on C++ Loop ---
 
     def update(self):
         self.adapt_dt_for_cfl()
