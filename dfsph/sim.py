@@ -177,30 +177,32 @@ class DFSPHSim:
 
     def compute_intermediate_density(self):
         """Wrapper that calls the Numba-parallelized intermediate density computation."""
-        return dfsph_pressure_solvers.compute_intermediate_density_numba(
+        dfsph_pressure_solvers.compute_intermediate_density_numba(
             self.particles.density, self.particles.position,
             self.particles.velocity, self.particles.mass, self.particles.types,
+            self.particles.density_intermediate,
             self.particles.neighbor_starts, self.particles.neighbor_counts,
             self.particles.neighbor_indices, self.dt, self.h,
             self.rest_density)
 
-    def adapt_velocity_density(self, density_intermediate):
+    def adapt_velocity_density(self):
         """Wrapper that calls the Numba-parallelized velocity adaptation."""
         dfsph_pressure_solvers.adapt_velocity_density_numba(
             self.particles.position, self.particles.velocity,
-            self.particles.density, self.particles.alpha, density_intermediate,
-            self.particles.mass, self.particles.types,
-            self.particles.neighbor_starts, self.particles.neighbor_counts,
-            self.particles.neighbor_indices, self.dt, self.h,
-            self.rest_density)
+            self.particles.density, self.particles.alpha,
+            self.particles.density_intermediate, self.particles.mass,
+            self.particles.types, self.particles.neighbor_starts,
+            self.particles.neighbor_counts, self.particles.neighbor_indices,
+            self.dt, self.h, self.rest_density)
 
     def solve_constant_density(self):
         """Iteratively enforces incompressibility via density correction."""
         for iteration in range(24):
-            density_intermediate = self.compute_intermediate_density()
+            self.compute_intermediate_density()
 
             # Compute maximum density error for logging
-            density_errors = np.abs(density_intermediate - self.rest_density)
+            density_errors = np.abs(self.particles.density_intermediate -
+                                    self.rest_density)
             max_error = np.max(density_errors)
             avg_error = np.mean(density_errors)
 
@@ -211,7 +213,7 @@ class DFSPHSim:
             if max_error < 1e-3 * self.rest_density:
                 break  # Converged
 
-            self.adapt_velocity_density(density_intermediate)
+            self.adapt_velocity_density()
 
     def update(self):
         self.adapt_dt_for_cfl()

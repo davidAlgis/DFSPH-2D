@@ -1,14 +1,15 @@
 import numpy as np
 from numba import njit, prange
-from dfsph.kernels import grad_w  # Ensure grad_w is Numba‑compatible
+from dfsph.kernels import grad_w
 
 
 @njit(parallel=True)
 def compute_intermediate_density_numba(density, position, velocity, mass,
-                                       types, neighbor_starts, neighbor_counts,
+                                       types, density_intermediate,
+                                       neighbor_starts, neighbor_counts,
                                        neighbor_indices, dt, h, rest_density):
     n = density.shape[0]
-    density_intermediate = np.copy(density)
+    # density_intermediate = np.copy(density)
     for i in prange(n):
         if types[i] == 0:  # Only fluid particles
             sum_fluid = 0.0
@@ -18,9 +19,7 @@ def compute_intermediate_density_numba(density, position, velocity, mass,
                 j = neighbor_indices[idx]
                 if i == j:
                     continue
-                # Compute kernel gradient between particle i and j.
                 grad = grad_w(position[i], position[j], h)
-                # Compute dot product between velocity difference and grad.
                 diff0 = velocity[i, 0] - velocity[j, 0]
                 diff1 = velocity[i, 1] - velocity[j, 1]
                 velocity_diff = diff0 * grad[0] + diff1 * grad[1]
@@ -43,7 +42,7 @@ def adapt_velocity_density_numba(position, velocity, density, alpha,
                                  neighbor_indices, dt, h, rest_density):
     n = velocity.shape[0]
     for i in prange(n):
-        if types[i] == 0:  # Only update fluid particles
+        if types[i] == 0:
             rho_i = density[i]
             kappa_i = (density_intermediate[i] -
                        rest_density) * alpha[i] / (dt * dt)

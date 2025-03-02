@@ -22,6 +22,10 @@ class Particles:
 
         self.mass = np.ones(num_particles, dtype=np.float32)
         self.density = np.ones(num_particles, dtype=np.float32)
+        # for constant density solver
+        self.density_intermediate = np.ones(num_particles, dtype=np.float32)
+        # for divergence free solver
+        self.density_derivative = np.ones(num_particles, dtype=np.float32)
         self.alpha = np.zeros(num_particles, dtype=np.float32)
         self.pressure = np.zeros(num_particles, dtype=np.float32)
 
@@ -71,6 +75,12 @@ class Particles:
         self.density = np.resize(self.density, self.num_particles)
         self.alpha = np.resize(self.alpha, self.num_particles)
         self.pressure = np.resize(self.pressure, self.num_particles)
+        # for constant density solver
+        self.density_intermediate = np.resize(self.density_intermediate,
+                                              self.num_particles)
+        # for divergence free solver
+        self.density_derivative = np.resize(self.density_derivative,
+                                            self.num_particles)
 
         self.types = np.resize(self.types, self.num_particles)
         self.neighbor_counts = np.resize(self.neighbor_counts,
