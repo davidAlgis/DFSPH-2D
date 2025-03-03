@@ -1,111 +1,129 @@
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
+import pyarrow as pa
+import os
 from concurrent.futures import ThreadPoolExecutor
+
+# Cache for simulation times
+_simulation_times_cache = None
 
 
 def init_export(export_path):
     """
-    Initialize the export CSV file with a header.
+    Initialize the export directory for Parquet snapshots.
     """
-    header = "sim_time,particle_index,x,y,vx,vy,density,mass,alpha,type\n"
-    with open(export_path, "w", newline="") as f:
-        f.write(header)
+    os.makedirs(export_path, exist_ok=True)  # Ensure directory exists
+    print(f"[Export] Initialized export directory: {export_path}")
 
 
 def export_snapshot(particles, export_path, sim_time, num_workers=4):
     """
-    Export a snapshot of the simulation's particle data to a CSV file.
-    The snapshot is exported in parallel by partitioning the data rows.
-    
-    Each row contains:
-        sim_time, particle_index, x, y, vx, vy, density, mass, alpha, type
-    """
-    num_particles = particles.num_particles
-    # Prepare the data columns.
-    indices = np.arange(num_particles, dtype=np.int32).reshape(-1, 1)
-    sim_time_col = np.full((num_particles, 1), sim_time, dtype=np.float64)
-    positions = particles.position.astype(np.float64)  # shape (n,2)
-    velocities = particles.velocity.astype(np.float64)  # shape (n,2)
-    density = particles.density.astype(np.float64).reshape(-1, 1)
-    mass = particles.mass.astype(np.float64).reshape(-1, 1)
-    alpha = particles.alpha.astype(np.float64).reshape(-1, 1)
-    types = particles.types.reshape(-1, 1)
-
-    # Stack columns horizontally: result shape (num_particles, 10)
-    data = np.hstack((sim_time_col, indices, positions, velocities, density,
-                      mass, alpha, types))
-
-    # Function to convert a chunk of rows into CSV-formatted lines.
-    def chunk_to_lines(chunk):
-        lines = []
-        fmt = "{:.5f},{:d},{:.5f},{:.5f},{:.5f},{:.5f},{:.5f},{:.5f},{:.5f},{:d}"
-        for row in chunk:
-            line = fmt.format(row[0], int(row[1]), row[2], row[3], row[4],
-                              row[5], row[6], row[7], row[8], int(row[9]))
-            lines.append(line)
-        return lines
-
-    # Partition the data into chunks for parallel processing.
-    chunk_size = (num_particles + num_workers - 1) // num_workers
-    chunks = [
-        data[i:i + chunk_size] for i in range(0, num_particles, chunk_size)
-    ]
-
-    # Process each chunk in parallel.
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        futures = [executor.submit(chunk_to_lines, chunk) for chunk in chunks]
-        lines_all = []
-        for future in futures:
-            lines_all.extend(future.result())
-
-    # Append all the formatted CSV lines to the export file.
-    with open(export_path, "a", newline="") as f:
-        for line in lines_all:
-            f.write(line + "\n")
-
-
-def import_snapshot(import_path, sim_time, num_workers=16):
-    """
-    Import a snapshot of the particles at the closest available `sim_time` from a CSV file.
+    Export a snapshot of the simulation's particle data to a Parquet file.
 
     Parameters:
-    - import_path (str): Path to the CSV file.
-    - sim_time (float): The target simulation time. The function will pick the closest available time.
-    - num_workers (int): Number of parallel workers for faster reading.
+    - particles: The Particles object.
+    - export_path: The directory where Parquet files are stored.
+    - sim_time: The current simulation time.
+    - num_workers: Number of threads for parallel export.
+    """
+    num_particles = particles.num_particles
+    file_path = os.path.join(export_path, f"snapshot_{sim_time:.5f}.parquet")
+
+    # Prepare the data as a Pandas DataFrame
+    data = {
+        "particle_index": np.arange(num_particles, dtype=np.int32),
+        "x": particles.position[:, 0],
+        "y": particles.position[:, 1],
+        "vx": particles.velocity[:, 0],
+        "vy": particles.velocity[:, 1],
+        "density": particles.density,
+        "mass": particles.mass,
+        "alpha": particles.alpha,
+        "type": particles.types
+    }
+
+    df = pd.DataFrame(data)
+    df.insert(0, "sim_time", sim_time)  # Add sim_time as the first column
+
+    # Write in parallel using PyArrow
+    table = pa.Table.from_pandas(df)
+    pq.write_table(table, file_path, compression="snappy")
+
+    print(f"[Export] Snapshot saved: {file_path}")
+
+
+def _get_simulation_times(export_path):
+    """
+    Reads and caches available simulation times from Parquet snapshots.
+    """
+    global _simulation_times_cache
+    if _simulation_times_cache is None:
+        print(f"[Import] Caching simulation times from {export_path}...")
+        files = [
+            f for f in os.listdir(export_path) if f.startswith("snapshot_")
+        ]
+        times = sorted(
+            [float(f.split("_")[1].replace(".parquet", "")) for f in files])
+        _simulation_times_cache = np.array(times)  # Store as NumPy array
+    return _simulation_times_cache
+
+
+def _find_closest_time(available_times, target_time):
+    """
+    Uses binary search to quickly find the closest simulation time.
+    """
+    idx = np.searchsorted(available_times, target_time, side="left")
+    if idx == 0:
+        return available_times[0]
+    elif idx == len(available_times):
+        return available_times[-1]
+    else:
+        before = available_times[idx - 1]
+        after = available_times[idx]
+        return before if abs(before -
+                             target_time) < abs(after - target_time) else after
+
+
+def import_snapshot(export_path, sim_time):
+    """
+    Efficiently imports a snapshot of particles from a Parquet file at the closest sim_time.
+
+    Parameters:
+    - export_path (str): Directory containing Parquet snapshots.
+    - sim_time (float): The target simulation time. The function picks the closest available time.
 
     Returns:
     - particles (Particles): A `Particles` object reconstructed at the closest `sim_time`.
     """
+    print(f"[Import] Loading snapshot for sim_time ≈ {sim_time:.3f}...")
 
-    print(
-        f"[Import] Loading snapshot from '{import_path}' for sim_time ≈ {sim_time:.3f}..."
-    )
-
-    # Read CSV file
-    df = pd.read_csv(import_path)
-
-    # Find the closest sim_time
-    available_times = df["sim_time"].unique()
-    closest_time = available_times[np.abs(available_times - sim_time).argmin()]
+    # Step 1: Get closest available time
+    available_times = _get_simulation_times(export_path)
+    closest_time = _find_closest_time(available_times, sim_time)
 
     print(f"[Import] Closest recorded sim_time found: {closest_time:.3f}")
 
-    # Filter rows for the closest sim_time
-    snapshot_df = df[df["sim_time"] == closest_time]
+    file_path = os.path.join(export_path,
+                             f"snapshot_{closest_time:.5f}.parquet")
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(
+            f"No snapshot file found for time {closest_time}")
 
-    if snapshot_df.empty:
-        raise ValueError(f"No data found for sim_time = {closest_time:.3f}")
+    # Step 2: Read the Parquet file
+    table = pq.read_table(file_path)
+    df = table.to_pandas()
 
-    # Extract particle attributes
-    indices = snapshot_df["particle_index"].to_numpy(dtype=np.int32)
-    positions = snapshot_df[["x", "y"]].to_numpy(dtype=np.float64)
-    velocities = snapshot_df[["vx", "vy"]].to_numpy(dtype=np.float64)
-    density = snapshot_df["density"].to_numpy(dtype=np.float64)
-    mass = snapshot_df["mass"].to_numpy(dtype=np.float64)
-    alpha = snapshot_df["alpha"].to_numpy(dtype=np.float64)
-    types = snapshot_df["type"].to_numpy(dtype=np.int32)
+    # Step 3: Extract particle attributes
+    indices = df["particle_index"].to_numpy(dtype=np.int32)
+    positions = df[["x", "y"]].to_numpy(dtype=np.float64)
+    velocities = df[["vx", "vy"]].to_numpy(dtype=np.float64)
+    density = df["density"].to_numpy(dtype=np.float64)
+    mass = df["mass"].to_numpy(dtype=np.float64)
+    alpha = df["alpha"].to_numpy(dtype=np.float64)
+    types = df["type"].to_numpy(dtype=np.int32)
 
-    # Sort particles by index to ensure proper order
+    # Step 4: Sort particles by index
     sorted_indices = np.argsort(indices)
     positions = positions[sorted_indices]
     velocities = velocities[sorted_indices]
@@ -114,9 +132,8 @@ def import_snapshot(import_path, sim_time, num_workers=16):
     alpha = alpha[sorted_indices]
     types = types[sorted_indices]
 
-    # Construct the Particles object
-    from dfsph.particles import Particles  # Import only when needed to avoid circular imports
-
+    # Step 5: Construct the Particles object
+    from dfsph.particles import Particles  # Import here to avoid circular imports
     num_particles = len(indices)
     particles = Particles(num_particles)
     particles.position = positions
