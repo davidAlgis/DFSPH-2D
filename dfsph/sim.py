@@ -201,20 +201,23 @@ class DFSPHSim:
         for iteration in range(max_iter):
             self.compute_intermediate_density()
 
-            # Compute maximum density error for logging
-            density_errors = np.abs(self.particles.density_intermediate -
-                                    self.rest_density)
-            max_error = np.max(density_errors)
+            # # Compute maximum density error for logging
+            # density_errors = np.abs(self.particles.density_intermediate -
+            #                         self.rest_density)
+            fluid_mask = (self.particles.types == 0)
+            density_errors = np.mean(
+                np.abs(self.particles.density_intermediate[fluid_mask] -
+                       self.rest_density))
             avg_error = np.mean(density_errors)
 
-            if max_error < 1e-3 * self.rest_density:
-                break  # Converged
+            if avg_error < 1e-3 * self.rest_density:
+                break
 
             self.adapt_velocity_density()
 
         if iteration >= max_iter - 1:
             print(
-                f"[Density Solver]: Max iteration reached ! max error = {max_error:.3f}, avg error = {avg_error:.3f}"
+                f"[Density Solver]: Max iteration reached ! avg error = {avg_error:.3f}"
             )
 
     def compute_density_derivative(self):
