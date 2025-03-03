@@ -113,6 +113,7 @@ def main():
         # Define the simulation update function.
         def update_sim():
             sim.update()
+            drawer.sim_time = sim.sim_time
 
         # Run the visualization loop.
         drawer.run(update_sim)

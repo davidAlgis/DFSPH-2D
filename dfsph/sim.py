@@ -28,6 +28,7 @@ class DFSPHSim:
         self.num_particles = particles.num_particles
         self.h = h
         self.dt = dt
+        self.sim_time = 0.0
         self.rest_density = rest_density
         self.water_viscosity = water_viscosity
         self.surface_tension_coeff = surface_tension_coeff
@@ -290,3 +291,4 @@ class DFSPHSim:
         self.compute_density_and_alpha()
 
         self.solve_divergence_free()
+        self.sim_time += self.dt

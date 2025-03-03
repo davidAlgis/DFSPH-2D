@@ -219,6 +219,12 @@ class SPHDrawer:
                                circle_radius, 2)
 
         self.draw_buttons()
+
+        # Render simulation time at the top left corner.
+        time_text = self.font.render(f"Time: {self.sim_time:.3f} s", True,
+                                     (255, 255, 255))
+        self.screen.blit(time_text, (10, 10))
+
         pygame.display.flip()
 
     def print_highlighted_particle_info(self):
