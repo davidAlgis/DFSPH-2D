@@ -1,6 +1,6 @@
 import numpy as np
 from dfsph.grid import Grid
-from dfsph.particles import Particles  # SoA structure
+from dfsph.particles import Particles
 from dfsph.kernels import w, grad_w
 import dfsph.sph_accelerated as sphjit
 import dfsph.dfsph_pressure_solvers as dfsph_pressure_solvers

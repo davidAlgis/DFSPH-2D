@@ -3,7 +3,7 @@ import pygame
 import numpy as np
 import threading
 from dfsph.drawer_ui import UIDrawer
-from dfsph.kernels import w  # Kernel functions (Numba accelerated)
+from dfsph.kernels import w
 import time
 
 
