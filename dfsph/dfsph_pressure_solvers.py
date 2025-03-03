@@ -37,8 +37,8 @@ def adapt_velocity_density_numba(position, velocity, density, alpha,
         if types[i] != 0:
             continue
 
-        kappa_i = (density_intermediate[i] - rest_density) * alpha[i] / dt2
-        kappa_div_rho_i = kappa_i / density[i]
+        p_i = (density_intermediate[i] - rest_density) * alpha[i] / dt2
+        p_div_rho_i = p_i / density[i]
         vel_corr0 = 0.0
         vel_corr1 = 0.0
         for idx in range(neighbor_starts[i],
@@ -46,13 +46,12 @@ def adapt_velocity_density_numba(position, velocity, density, alpha,
             j = neighbor_indices[idx]
             gradwij = grad_w(position[i], position[j], h)
             if types[j] == 0:
-                kappa_j = (density_intermediate[j] -
-                           rest_density) * alpha[j] / dt2
-                scalar = mass[i] * (kappa_div_rho_i + kappa_j / density[j])
+                p_j = (density_intermediate[j] - rest_density) * alpha[j] / dt2
+                scalar = mass[i] * (p_div_rho_i + p_j / density[j])
                 vel_corr0 += scalar * gradwij[0]
                 vel_corr1 += scalar * gradwij[1]
             else:
-                scalar = 2.0 * mass[j] * kappa_div_rho_i
+                scalar = 2.0 * mass[j] * p_div_rho_i
                 vel_corr0 += scalar * gradwij[0]
                 vel_corr1 += scalar * gradwij[1]
         velocity[i, 0] -= dt * vel_corr0
