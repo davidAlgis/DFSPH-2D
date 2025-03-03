@@ -2,9 +2,10 @@ import os
 import pygame
 import numpy as np
 import threading
+import time
 from dfsph.drawer_ui import UIDrawer
 from dfsph.kernels import w
-import time
+from dfsph.particles_loader import import_snapshot
 
 
 class SPHDrawer:
@@ -15,17 +16,17 @@ class SPHDrawer:
                  grid_size,
                  support_radius,
                  cell_size,
+                 import_path="",
                  width=600,
                  height=600,
                  particle_radius=3,
                  density_range=(500, 1500)):
         """
         Initialize the Pygame visualization for SPH particles.
-        All particle data is expected to reside in a Particles object.
+        If `import_path` is set, particles will be loaded from a CSV file instead of a live simulation.
         """
         pygame.init()
-
-        # Convert grid size and position to float arrays.
+        self.import_path = import_path  # File path for loading CSV snapshots
         self.grid_size = np.array(grid_size, dtype=float)
         self.grid_origin = np.array(grid_origin, dtype=float)
         self.cell_size = cell_size
@@ -88,6 +89,7 @@ class SPHDrawer:
 
         # Pre-render grid background.
         self.grid_surface = self._create_grid_surface()
+        self.timestep = 0.0333
 
     def _create_grid_surface(self):
         """
@@ -345,7 +347,9 @@ class SPHDrawer:
         """
         self.running = True
         self.timestep = timestep
-
+        if self.import_path:
+            self.imported_simulation_loop()
+            return
         # Launch the simulation update thread.
         sim_thread = threading.Thread(target=self.simulation_loop,
                                       args=(update_func, ),
@@ -368,6 +372,32 @@ class SPHDrawer:
                 self.print_highlighted_particle_info()
                 self.frame_count += 1
                 self.just_stepped = False
+            self.clock.tick(30)
+
+        pygame.quit()
+
+    def imported_simulation_loop(self):
+        """Loop that loads snapshots from CSV at each timestep."""
+        while self.running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.running = False
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    self.handle_click(event.pos)
+
+            particles = import_snapshot(self.import_path, self.sim_time)
+            self.set_particles(particles)
+            self.draw_particles()
+            self.sim_time += self.timestep
+
+            if not self.paused:
+                self.print_highlighted_particle_info()
+                self.frame_count += 1
+            elif self.just_stepped:
+                self.print_highlighted_particle_info()
+                self.frame_count += 1
+                self.just_stepped = False
+            # time.sleep(self.timestep)
             self.clock.tick(30)
 
         pygame.quit()

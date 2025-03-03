@@ -64,7 +64,7 @@ def export_snapshot(particles, export_path, sim_time, num_workers=4):
             f.write(line + "\n")
 
 
-def import_snapshot(import_path, sim_time, num_workers=4):
+def import_snapshot(import_path, sim_time, num_workers=16):
     """
     Import a snapshot of the particles at the closest available `sim_time` from a CSV file.
 

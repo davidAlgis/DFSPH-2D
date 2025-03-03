@@ -3,6 +3,7 @@ import numpy as np
 from dfsph.sim import DFSPHSim
 from dfsph.drawer import SPHDrawer
 from dfsph.particle_init import particles_init
+from dfsph.particles_loader import import_snapshot
 
 
 def str2bool(v):
@@ -17,10 +18,8 @@ def str2bool(v):
 
 
 def main():
-    # Parse command-line arguments.
     parser = argparse.ArgumentParser(
         description="Launch a DFSPH fluid simulation.")
-    # Simulation parameters.
 
     parser.add_argument("-r",
                         "--support_radius",
@@ -87,57 +86,85 @@ def main():
         "Relative file path to export particle data as CSV every 0.033 sec (default: \"\")"
     )
 
+    # **Import results for visualization only**
+    parser.add_argument(
+        "-i",
+        "--import_results",
+        type=str,
+        default="",
+        help=
+        "Relative file path to import particle data as CSV for visualization only (default: \"\")"
+    )
+
     args = parser.parse_args()
 
-    # Initialize particles
-    particles = particles_init(grid_origin=args.grid_origin,
+    if args.import_results:
+        print(f"Loading simulation from file: {args.import_results}")
+
+        # Load the first snapshot to get particle properties
+        particles = import_snapshot(args.import_results, sim_time=0.0)
+
+        num_particles = particles.num_particles
+        print(f"Loaded {num_particles} particles from CSV.")
+
+        if args.visualize:
+            drawer = SPHDrawer(num_particles=num_particles,
+                               grid_origin=args.grid_origin,
                                grid_size=args.grid_size,
-                               h=args.support_radius,
-                               rest_density=args.rest_density,
-                               spacing=args.support_radius / 3,
-                               box_origin=args.box_origin,
-                               box_size=args.box_size)
+                               support_radius=args.support_radius,
+                               cell_size=args.support_radius,
+                               import_path=args.import_results)
 
-    num_particles = particles.num_particles
-    print(f"Launching DFSPH simulation with {num_particles} particles...")
-    cell_size = args.support_radius
+            # Run the visualization, the drawer will load the snapshots from the CSV
+            drawer.run(None)
 
-    # **Create the simulation instance with export path**
-    sim = DFSPHSim(particles,
-                   h=args.support_radius,
-                   dt=args.timestep,
-                   grid_origin=tuple(args.grid_origin),
-                   grid_size=tuple(args.grid_size),
-                   cell_size=cell_size,
-                   rest_density=args.rest_density,
-                   export_path=args.export_results)
-
-    if args.visualize:
-        # Create the visualization drawer.
-        drawer = SPHDrawer(num_particles=num_particles,
-                           grid_origin=args.grid_origin,
-                           grid_size=args.grid_size,
-                           support_radius=args.support_radius,
-                           cell_size=cell_size)
-        # Set the drawer to work directly with the simulation's Particles object.
-        drawer.set_particles(sim.particles)
-
-        # Define the simulation update function.
-        def update_sim():
-            sim.update()
-            drawer.sim_time = sim.sim_time
-
-        # Run the visualization loop.
-        drawer.run(update_sim)
     else:
-        print(
-            f"Starting simulation without visualization with {num_particles} particles..."
-        )
-        for i in range(args.steps):
-            sim.update()
-            if i % 100 == 0:
-                print(f"Step {i}/{args.steps} complete.")
-        print("Simulation completed.")
+        # Initialize particles
+        particles = particles_init(grid_origin=args.grid_origin,
+                                   grid_size=args.grid_size,
+                                   h=args.support_radius,
+                                   rest_density=args.rest_density,
+                                   spacing=args.support_radius / 3,
+                                   box_origin=args.box_origin,
+                                   box_size=args.box_size)
+
+        num_particles = particles.num_particles
+        print(f"Launching DFSPH simulation with {num_particles} particles...")
+        cell_size = args.support_radius
+
+        # **Create the simulation instance**
+        sim = DFSPHSim(particles,
+                       h=args.support_radius,
+                       dt=args.timestep,
+                       grid_origin=tuple(args.grid_origin),
+                       grid_size=tuple(args.grid_size),
+                       cell_size=cell_size,
+                       rest_density=args.rest_density,
+                       export_path=args.export_results)
+
+        if args.visualize:
+            drawer = SPHDrawer(num_particles=num_particles,
+                               grid_origin=args.grid_origin,
+                               grid_size=args.grid_size,
+                               support_radius=args.support_radius,
+                               cell_size=cell_size)
+
+            drawer.set_particles(sim.particles)
+
+            def update_sim():
+                sim.update()
+                drawer.sim_time = sim.sim_time
+
+            drawer.run(update_sim)
+        else:
+            print(
+                f"Starting simulation without visualization with {num_particles} particles..."
+            )
+            for i in range(args.steps):
+                sim.update()
+                if i % 100 == 0:
+                    print(f"Step {i}/{args.steps} complete.")
+            print("Simulation completed.")
 
 
 if __name__ == "__main__":
