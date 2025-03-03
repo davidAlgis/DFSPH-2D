@@ -3,7 +3,6 @@ import numpy as np
 from dfsph.sim import DFSPHSim
 from dfsph.drawer import SPHDrawer
 from dfsph.particle_init import particles_init
-import time
 
 
 def str2bool(v):
@@ -22,6 +21,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="Launch a DFSPH fluid simulation.")
     # Simulation parameters.
+
     parser.add_argument("-r",
                         "--support_radius",
                         type=float,
@@ -38,7 +38,8 @@ def main():
         type=int,
         default=1000,
         help="Number of simulation steps before relaunch (default: 1000)")
-    # Box parameters for particle initialization.
+
+    # Box & Grid parameters
     parser.add_argument(
         "--box_origin",
         type=float,
@@ -51,12 +52,7 @@ def main():
         type=float,
         nargs=2,
         default=[2, 2],
-        help="Size of the box where particles are initialized (default: 1 1)")
-    parser.add_argument("--rest_density",
-                        type=float,
-                        default=1027.0,
-                        help="Rest density of the fluid (default: 102.0)")
-    # Grid parameters.
+        help="Size of the box where particles are initialized (default: 2 2)")
     parser.add_argument(
         "--grid_size",
         type=int,
@@ -69,7 +65,11 @@ def main():
         nargs=2,
         default=[0.0, 0.0],
         help="Position of the grid in simulation space (default: 0.0 0.0)")
-    # Visualization option.
+
+    parser.add_argument("--rest_density",
+                        type=float,
+                        default=1027.0,
+                        help="Rest density of the fluid (default: 1027.0)")
     parser.add_argument(
         "-v",
         "--visualize",
@@ -77,9 +77,19 @@ def main():
         default=True,
         help="Enable real-time visualization using Pygame (default: enabled)")
 
+    # **Export results**
+    parser.add_argument(
+        "-e",
+        "--export_results",
+        type=str,
+        default="",
+        help=
+        "Relative file path to export particle data as CSV every 0.033 sec (default: \"\")"
+    )
+
     args = parser.parse_args()
 
-    # Initialize particles.
+    # Initialize particles
     particles = particles_init(grid_origin=args.grid_origin,
                                grid_size=args.grid_size,
                                h=args.support_radius,
@@ -87,18 +97,20 @@ def main():
                                spacing=args.support_radius / 3,
                                box_origin=args.box_origin,
                                box_size=args.box_size)
+
     num_particles = particles.num_particles
     print(f"Launching DFSPH simulation with {num_particles} particles...")
     cell_size = args.support_radius
 
-    # Create the simulation instance.
+    # **Create the simulation instance with export path**
     sim = DFSPHSim(particles,
                    h=args.support_radius,
                    dt=args.timestep,
                    grid_origin=tuple(args.grid_origin),
                    grid_size=tuple(args.grid_size),
                    cell_size=cell_size,
-                   rest_density=args.rest_density)
+                   rest_density=args.rest_density,
+                   export_path=args.export_results)
 
     if args.visualize:
         # Create the visualization drawer.

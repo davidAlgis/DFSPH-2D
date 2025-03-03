@@ -4,6 +4,7 @@ from dfsph.particles import Particles
 from dfsph.kernels import w, grad_w
 import dfsph.sph_accelerated as sphjit
 import dfsph.dfsph_pressure_solvers as dfsph_pressure_solvers
+import dfsph.particles_loader as exporter
 
 # Constants for force types
 PRESSURE = 0
@@ -22,20 +23,26 @@ class DFSPHSim:
                  grid_size,
                  cell_size,
                  rest_density=1027,
-                 water_viscosity=10,
-                 surface_tension_coeff=2.0):
+                 water_viscosity=0.01,
+                 surface_tension_coeff=2.0,
+                 export_path=""):
         self.particles = particles
         self.num_particles = particles.num_particles
         self.h = h
         self.dt = dt
         self.sim_time = 0.0
+        self.last_export_time = 0.0
         self.rest_density = rest_density
         self.water_viscosity = water_viscosity
         self.surface_tension_coeff = surface_tension_coeff
-
+        self.export_path = export_path
         self.mean_density = 0
         self.gamma_mass_solid = 1.4
-
+        if self.export_path:
+            exporter.init_export(self.export_path)
+            print(
+                f"[Export] Data will be saved to '{self.export_path}' every 0.033 sec."
+            )
         self.grid = Grid(grid_origin, grid_size, cell_size)
         self.gravity = np.array([0, -9.81], dtype=np.float64)
 
@@ -267,6 +274,14 @@ class DFSPHSim:
                 f"[Divergence Solver]: Max iteration reached ! density derivative avg = {density_derivative_avg:.3f}"
             )
 
+    def export_data(self):
+        # **Handle exporting**
+        if self.export_path and (self.sim_time -
+                                 self.last_export_time) >= 0.033:
+            exporter.export_snapshot(self.particles, self.export_path,
+                                     self.sim_time)
+            self.last_export_time = self.sim_time
+
     def update(self):
         self.adapt_dt_for_cfl()
         self.reset_forces()
@@ -292,3 +307,4 @@ class DFSPHSim:
 
         self.solve_divergence_free()
         self.sim_time += self.dt
+        self.export_data()
