@@ -110,8 +110,8 @@ def main():
         print(f"Importing initial configuration from file: {args.import_init}")
         particles = import_snapshot(args.import_init, sim_time=0.0)
     else:
-        particles = particles_init(grid_origin=args.box_origin,
-                                   grid_size=args.box_size,
+        particles = particles_init(grid_origin=args.grid_origin,
+                                   grid_size=args.grid_size,
                                    h=args.support_radius,
                                    rest_density=args.rest_density,
                                    spacing=args.support_radius / 3,
