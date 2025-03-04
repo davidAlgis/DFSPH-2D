@@ -3,9 +3,11 @@ import pygame
 import numpy as np
 import threading
 import time
+import tkinter as tk
+from tkinter import filedialog
 from dfsph.drawer_ui import UIDrawer
 from dfsph.kernels import w
-from dfsph.particles_loader import import_snapshot
+from dfsph.particles_loader import import_snapshot, export_snapshot
 
 
 class SPHDrawer:
@@ -23,10 +25,10 @@ class SPHDrawer:
                  density_range=(500, 1500)):
         """
         Initialize the Pygame visualization for SPH particles.
-        If `import_path` is set, particles will be loaded from a CSV file instead of a live simulation.
+        If `import_path` is set, particles will be loaded from a binary file instead of a live simulation.
         """
         pygame.init()
-        self.import_path = import_path  # File path for loading CSV snapshots
+        self.import_path = import_path  # File path for loading snapshots
         self.grid_size = np.array(grid_size, dtype=float)
         self.grid_origin = np.array(grid_origin, dtype=float)
         self.cell_size = cell_size
@@ -85,11 +87,10 @@ class SPHDrawer:
 
         # Simulation time and timestep.
         self.sim_time = 0.0
-        self.timestep = 0.0
+        self.timestep = 0.0333
 
         # Pre-render grid background.
         self.grid_surface = self._create_grid_surface()
-        self.timestep = 0.0333
 
     def _create_grid_surface(self):
         """
@@ -127,8 +128,7 @@ class SPHDrawer:
 
     def set_particles(self, particles):
         """
-        Instead of copying data into dictionaries, we simply store a reference
-        to the simulation's Particles object.
+        Instead of copying data, simply store a reference to the simulation's Particles object.
         """
         self.particles = particles
 
@@ -193,7 +193,7 @@ class SPHDrawer:
 
     def draw_particles(self):
         """
-        Render particles directly using the Particles object's arrays.
+        Render particles using the Particles object's arrays.
         """
         self.screen.blit(self.grid_surface, (0, 0))
         if self.particles is None:
@@ -231,8 +231,7 @@ class SPHDrawer:
 
     def print_highlighted_particle_info(self):
         """
-        Print info of the highlighted particle directly from the Particles object,
-        including all force components.
+        Print info of the highlighted particle from the Particles object.
         """
         if self.particles is None or self.highlighted_index is None:
             return
@@ -246,7 +245,7 @@ class SPHDrawer:
         cnt = self.particles.neighbor_counts[i] if hasattr(
             self.particles, 'neighbor_counts') else 0
 
-        # Retrieve force vectors from the particle arrays.
+        # Retrieve force vectors.
         vf = self.particles.viscosity_forces[i]
         ef = self.particles.external_forces[i]
         pf = self.particles.pressure_forces[i]
@@ -269,7 +268,7 @@ class SPHDrawer:
 
     def handle_click(self, mouse_pos):
         """
-        Process mouse clicks for UI or particle selection using the Particles arrays.
+        Process mouse clicks for UI or particle selection.
         """
         ui_action = self.ui.handle_click(mouse_pos)
         if ui_action is not None:
@@ -285,8 +284,25 @@ class SPHDrawer:
                 self.step_once = True
                 self.paused = True
                 print("Simulation stepped (Step).")
+            elif ui_action == "save":
+                print("Save button clicked.")
+                # Open a Tkinter file-save dialog.
+                root = tk.Tk()
+                root.withdraw()
+                file_path = filedialog.asksaveasfilename(
+                    title="Save Snapshot",
+                    defaultextension=".parquet",
+                    filetypes=[("Parquet files", "*.parquet"),
+                               ("All files", "*.*")])
+                root.destroy()
+                if file_path:
+                    export_snapshot(self.particles, file_path, self.sim_time)
+                    print(f"Snapshot saved to {file_path}")
+                else:
+                    print("Save cancelled.")
             return
 
+        # Particle selection logic.
         world_click = self.screen_to_world(mouse_pos)
         threshold = self.particle_radius / min(self.scale_x, self.scale_y)
         if self.particles is None:
@@ -377,19 +393,19 @@ class SPHDrawer:
         pygame.quit()
 
     def imported_simulation_loop(self):
-        """Loop that loads snapshots from CSV at each timestep."""
+        """
+        Loop that loads snapshots from the binary file at each timestep.
+        """
         while self.running:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(event.pos)
-
             particles = import_snapshot(self.import_path, self.sim_time)
             self.set_particles(particles)
             self.draw_particles()
             self.sim_time += self.timestep
-
             if not self.paused:
                 self.print_highlighted_particle_info()
                 self.frame_count += 1
@@ -397,9 +413,7 @@ class SPHDrawer:
                 self.print_highlighted_particle_info()
                 self.frame_count += 1
                 self.just_stepped = False
-            # time.sleep(self.timestep)
             self.clock.tick(30)
-
         pygame.quit()
 
     def simulation_loop(self, update_func):

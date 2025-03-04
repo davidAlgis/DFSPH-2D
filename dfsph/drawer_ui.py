@@ -38,6 +38,8 @@ class UIDrawer:
             os.path.join(assets_dir, "pause.png")).convert_alpha()
         self.step_icon = pygame.image.load(os.path.join(
             assets_dir, "step.png")).convert_alpha()
+        self.save_icon = pygame.image.load(os.path.join(
+            assets_dir, "save.png")).convert_alpha()
 
         # Scale the button background to fill the square.
         self.button_bg = pygame.transform.scale(self.button_bg,
@@ -50,18 +52,22 @@ class UIDrawer:
                                                  (icon_size, icon_size))
         self.step_icon = pygame.transform.scale(self.step_icon,
                                                 (icon_size, icon_size))
+        self.save_icon = pygame.transform.scale(self.save_icon,
+                                                (icon_size, icon_size))
         # Calculate offset to center the icon.
         self.icon_offset = ((button_size - icon_size) // 2,
                             (button_size - icon_size) // 2)
 
         # Define button rectangles arranged horizontally in the top-right corner.
-        total_width = 3 * button_size + 4 * padding
+        total_width = 4 * button_size + 5 * padding  # Now 4 buttons
         x0 = window_width - total_width
         y0 = padding
         self.play_button = pygame.Rect(x0, y0, button_size, button_size)
         self.pause_button = pygame.Rect(x0 + button_size + padding, y0,
                                         button_size, button_size)
         self.step_button = pygame.Rect(x0 + 2 * (button_size + padding), y0,
+                                       button_size, button_size)
+        self.save_button = pygame.Rect(x0 + 3 * (button_size + padding), y0,
                                        button_size, button_size)
 
     def draw_buttons(self):
@@ -86,12 +92,18 @@ class UIDrawer:
                     self.step_button.top + self.icon_offset[1])
         self.screen.blit(self.step_icon, step_pos)
 
+        # Draw background and icon for Save button.
+        self.screen.blit(self.button_bg, self.save_button.topleft)
+        save_pos = (self.save_button.left + self.icon_offset[0],
+                    self.save_button.top + self.icon_offset[1])
+        self.screen.blit(self.save_icon, save_pos)
+
     def handle_click(self, mouse_pos):
         """
         Checks if the mouse click is on one of the control buttons.
         
         :param mouse_pos: (x, y) tuple from the mouse event.
-        :return: "play", "pause", "step", or None if no button was clicked.
+        :return: "play", "pause", "step", "save", or None if no button was clicked.
         """
         if self.play_button.collidepoint(mouse_pos):
             return "play"
@@ -99,4 +111,6 @@ class UIDrawer:
             return "pause"
         elif self.step_button.collidepoint(mouse_pos):
             return "step"
+        elif self.save_button.collidepoint(mouse_pos):
+            return "save"
         return None
