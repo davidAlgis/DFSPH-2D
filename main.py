@@ -4,6 +4,7 @@ from dfsph.sim import DFSPHSim
 from dfsph.drawer import SPHDrawer
 from dfsph.particle_init import particles_init
 from dfsph.particles_loader import import_snapshot
+from dfsph.init_helper import DFSPHInitConfig
 
 
 def str2bool(v):
@@ -31,12 +32,11 @@ def main():
                         type=float,
                         default=0.01,
                         help="Time step for the simulation (default: 0.01)")
-    parser.add_argument(
-        "-s",
-        "--steps",
-        type=int,
-        default=1000,
-        help="Number of simulation steps before relaunch (default: 1000)")
+    parser.add_argument("-s",
+                        "--steps",
+                        type=int,
+                        default=1000,
+                        help="Number of simulation steps (default: 1000)")
 
     # Box & Grid parameters
     parser.add_argument(
@@ -44,20 +44,20 @@ def main():
         type=float,
         nargs=2,
         default=[0.5, 0.5],
-        help=
-        "Origin of the box where particles are initialized (default: 0.5 0.5)")
+        help="Origin of the box for particle initialization (default: 0.5 0.5)"
+    )
     parser.add_argument(
         "--box_size",
         type=float,
         nargs=2,
         default=[2, 2],
-        help="Size of the box where particles are initialized (default: 2 2)")
+        help="Size of the box for particle initialization (default: 2 2)")
     parser.add_argument(
         "--grid_size",
         type=int,
         nargs=2,
         default=[4, 4],
-        help="Size of the grid as (width, height) (default: 4 4)")
+        help="Grid dimensions as (width, height) (default: 4 4)")
     parser.add_argument(
         "--grid_origin",
         type=float,
@@ -74,7 +74,7 @@ def main():
         "--visualize",
         type=str2bool,
         default=True,
-        help="Enable real-time visualization using Pygame (default: enabled)")
+        help="Enable real-time visualization (default: enabled)")
 
     # Export and Import results for snapshots.
     parser.add_argument(
@@ -82,30 +82,25 @@ def main():
         "--export_results",
         type=str,
         default="",
-        help=
-        "Relative file name to export particle data (stored as binary Parquet) (default: \"\")"
-    )
+        help="File name to export particle data (default: empty)")
     parser.add_argument(
         "-i",
         "--import_results",
         type=str,
         default="",
         help=
-        "Relative file name to import particle data for visualization only (default: \"\")"
-    )
-    # New argument: Import initial configuration.
+        "File name to import particle data for visualization (default: empty)")
     parser.add_argument(
         "-ii",
         "--import_init",
         type=str,
         default="",
         help=
-        "Relative file name to import initial particle configuration. If provided, simulation uses this configuration instead of generating new particles."
-    )
+        "File name to import initial particle configuration (default: empty)")
 
     args = parser.parse_args()
 
-    # If an initial configuration file is provided, load particles from it.
+    # Load initial particles (either from file or by initializing)
     if args.import_init:
         print(f"Importing initial configuration from file: {args.import_init}")
         particles = import_snapshot(args.import_init, sim_time=0.0)
@@ -120,7 +115,6 @@ def main():
 
     num_particles = particles.num_particles
 
-    # If import_results is provided, we're in visualization-only mode.
     if args.import_results:
         print(
             f"Loading {num_particles} particles from file: {args.import_results}"
@@ -132,28 +126,24 @@ def main():
                                support_radius=args.support_radius,
                                cell_size=args.support_radius,
                                import_path=args.import_results)
-            # Run visualization; drawer will load snapshots from the file.
             drawer.run(None)
     else:
         print(f"Launching DFSPH simulation with {num_particles} particles...")
-        cell_size = args.support_radius
-
-        # Create simulation instance.
-        sim = DFSPHSim(particles,
-                       h=args.support_radius,
-                       dt=args.timestep,
-                       grid_origin=tuple(args.grid_origin),
-                       grid_size=tuple(args.grid_size),
-                       cell_size=cell_size,
-                       rest_density=args.rest_density,
-                       export_path=args.export_results)
+        # Create DFSPH configuration using the helper class.
+        config = DFSPHInitConfig(h=args.support_radius,
+                                 dt=args.timestep,
+                                 grid_origin=tuple(args.grid_origin),
+                                 grid_size=tuple(args.grid_size),
+                                 cell_size=args.support_radius,
+                                 rest_density=args.rest_density)
+        sim = DFSPHSim(particles, config, export_path=args.export_results)
 
         if args.visualize:
             drawer = SPHDrawer(num_particles=num_particles,
                                grid_origin=args.grid_origin,
                                grid_size=args.grid_size,
                                support_radius=args.support_radius,
-                               cell_size=cell_size)
+                               cell_size=args.support_radius)
             drawer.set_particles(sim.particles)
 
             def update_sim():

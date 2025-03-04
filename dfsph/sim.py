@@ -2,6 +2,7 @@ import numpy as np
 from dfsph.grid import Grid
 from dfsph.particles import Particles
 from dfsph.kernels import w, grad_w
+from dfsph.init_helper import DFSPHInitConfig
 import dfsph.sph_accelerated as sphjit
 import dfsph.dfsph_pressure_solvers as dfsph_pressure_solvers
 import dfsph.particles_loader as exporter
@@ -17,24 +18,17 @@ class DFSPHSim:
 
     def __init__(self,
                  particles: Particles,
-                 h,
-                 dt,
-                 grid_origin,
-                 grid_size,
-                 cell_size,
-                 rest_density=1027,
-                 water_viscosity=0.01,
-                 surface_tension_coeff=2.0,
+                 config: DFSPHInitConfig,
                  export_path=""):
         self.particles = particles
         self.num_particles = particles.num_particles
-        self.h = h
-        self.dt = dt
+        self.h = config.h
+        self.dt = config.dt
         self.sim_time = 0.0
         self.last_export_time = 0.0
-        self.rest_density = rest_density
-        self.water_viscosity = water_viscosity
-        self.surface_tension_coeff = surface_tension_coeff
+        self.rest_density = config.rest_density
+        self.water_viscosity = config.water_viscosity
+        self.surface_tension_coeff = config.surface_tension_coeff
         self.export_path = export_path
         self.mean_density = 0
         self.gamma_mass_solid = 1.4
@@ -43,7 +37,8 @@ class DFSPHSim:
             print(
                 f"[Export] Data will be saved to '{self.export_path}' every 0.033 sec."
             )
-        self.grid = Grid(grid_origin, grid_size, cell_size)
+        self.grid = Grid(config.grid_origin, config.grid_size,
+                         config.cell_size)
         self.gravity = np.array([0, -9.81], dtype=np.float64)
 
         # First update neighbors (which now updates all neighbor arrays)
