@@ -287,6 +287,7 @@ class SPHDrawer:
             elif ui_action == "save":
                 print("Save button clicked.")
                 # Open a Tkinter file-save dialog.
+                self.paused = True
                 root = tk.Tk()
                 root.withdraw()
                 file_path = filedialog.asksaveasfilename(
