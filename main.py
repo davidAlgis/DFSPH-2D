@@ -76,36 +76,55 @@ def main():
         default=True,
         help="Enable real-time visualization using Pygame (default: enabled)")
 
-    # **Export results**
+    # Export and Import results for snapshots.
     parser.add_argument(
         "-e",
         "--export_results",
         type=str,
         default="",
         help=
-        "Relative file path to export particle data as CSV every 0.033 sec (default: \"\")"
+        "Relative file name to export particle data (stored as binary Parquet) (default: \"\")"
     )
-
-    # **Import results for visualization only**
     parser.add_argument(
         "-i",
         "--import_results",
         type=str,
         default="",
         help=
-        "Relative file path to import particle data as CSV for visualization only (default: \"\")"
+        "Relative file name to import particle data for visualization only (default: \"\")"
+    )
+    # New argument: Import initial configuration.
+    parser.add_argument(
+        "-ii",
+        "--import_init",
+        type=str,
+        default="",
+        help=
+        "Relative file name to import initial particle configuration. If provided, simulation uses this configuration instead of generating new particles."
     )
 
     args = parser.parse_args()
 
+    # If an initial configuration file is provided, load particles from it.
+    if args.import_init:
+        print(f"Importing initial configuration from file: {args.import_init}")
+        particles = import_snapshot(args.import_init, sim_time=0.0)
+    else:
+        particles = particles_init(grid_origin=args.box_origin,
+                                   grid_size=args.box_size,
+                                   h=args.support_radius,
+                                   rest_density=args.rest_density,
+                                   spacing=args.support_radius / 3,
+                                   box_origin=args.box_origin,
+                                   box_size=args.box_size)
+
+    num_particles = particles.num_particles
+
+    # If import_results is provided, we're in visualization-only mode.
     if args.import_results:
-
-        # Load the first snapshot to get particle properties
-        particles = import_snapshot(args.import_results, sim_time=0.0)
-
-        num_particles = particles.num_particles
-        print(f"Loading {num_particles} from file: {args.import_results}")
-
+        print(
+            f"Loading {num_particles} particles from file: {args.import_results}"
+        )
         if args.visualize:
             drawer = SPHDrawer(num_particles=num_particles,
                                grid_origin=args.grid_origin,
@@ -113,25 +132,13 @@ def main():
                                support_radius=args.support_radius,
                                cell_size=args.support_radius,
                                import_path=args.import_results)
-
-            # Run the visualization, the drawer will load the snapshots from the CSV
+            # Run visualization; drawer will load snapshots from the file.
             drawer.run(None)
-
     else:
-        # Initialize particles
-        particles = particles_init(grid_origin=args.grid_origin,
-                                   grid_size=args.grid_size,
-                                   h=args.support_radius,
-                                   rest_density=args.rest_density,
-                                   spacing=args.support_radius / 3,
-                                   box_origin=args.box_origin,
-                                   box_size=args.box_size)
-
-        num_particles = particles.num_particles
         print(f"Launching DFSPH simulation with {num_particles} particles...")
         cell_size = args.support_radius
 
-        # **Create the simulation instance**
+        # Create simulation instance.
         sim = DFSPHSim(particles,
                        h=args.support_radius,
                        dt=args.timestep,
@@ -147,7 +154,6 @@ def main():
                                grid_size=args.grid_size,
                                support_radius=args.support_radius,
                                cell_size=cell_size)
-
             drawer.set_particles(sim.particles)
 
             def update_sim():
