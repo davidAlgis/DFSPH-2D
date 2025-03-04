@@ -68,6 +68,8 @@ class SPHDrawer:
                            self.height,
                            button_size=30,
                            padding=5)
+        # We'll use self.ui.active_button to highlight the current state.
+        self.ui.active_button = None
 
         # Simulation control flags.
         self.paused = False
@@ -128,7 +130,7 @@ class SPHDrawer:
 
     def set_particles(self, particles):
         """
-        Instead of copying data, simply store a reference to the simulation's Particles object.
+        Store a reference to the simulation's Particles object.
         """
         self.particles = particles
 
@@ -162,9 +164,10 @@ class SPHDrawer:
 
     def draw_buttons(self):
         """
-        Draw UI buttons.
+        Draw UI buttons. The UIDrawer draws a highlight border if its active_button attribute is set.
         """
-        self.ui.draw_buttons()
+        # Pass the active button to the UI drawer.
+        self.ui.draw_buttons(self.ui.active_button)
 
     def get_particle_color(self, density, particle_index, pos):
         """
@@ -231,7 +234,7 @@ class SPHDrawer:
 
     def print_highlighted_particle_info(self):
         """
-        Print info of the highlighted particle from the Particles object.
+        Print info of the highlighted particle.
         """
         if self.particles is None or self.highlighted_index is None:
             return
@@ -245,7 +248,6 @@ class SPHDrawer:
         cnt = self.particles.neighbor_counts[i] if hasattr(
             self.particles, 'neighbor_counts') else 0
 
-        # Retrieve force vectors.
         vf = self.particles.viscosity_forces[i]
         ef = self.particles.external_forces[i]
         pf = self.particles.pressure_forces[i]
@@ -275,19 +277,22 @@ class SPHDrawer:
             if ui_action == "play":
                 self.paused = False
                 self.step_once = False
+                self.ui.active_button = "play"
                 print("Simulation resumed (Play).")
             elif ui_action == "pause":
                 self.paused = True
                 self.step_once = False
+                self.ui.active_button = "pause"
                 print("Simulation paused (Pause).")
             elif ui_action == "step":
                 self.step_once = True
                 self.paused = True
+                self.ui.active_button = "step"
                 print("Simulation stepped (Step).")
             elif ui_action == "save":
-                print("Save button clicked.")
-                # Open a Tkinter file-save dialog.
                 self.paused = True
+                self.ui.active_button = "save"
+                print("Save button clicked.")
                 root = tk.Tk()
                 root.withdraw()
                 file_path = filedialog.asksaveasfilename(
@@ -380,6 +385,8 @@ class SPHDrawer:
                     self.running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     self.handle_click(event.pos)
+            # Update active state based on simulation flags.
+            self.ui.active_button = "play" if not self.paused else "pause"
             self.draw_particles()
 
             if not self.paused:

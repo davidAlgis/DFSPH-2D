@@ -59,7 +59,7 @@ class UIDrawer:
                             (button_size - icon_size) // 2)
 
         # Define button rectangles arranged horizontally in the top-right corner.
-        total_width = 4 * button_size + 5 * padding  # Now 4 buttons
+        total_width = 4 * button_size + 5 * padding  # 4 buttons
         x0 = window_width - total_width
         y0 = padding
         self.play_button = pygame.Rect(x0, y0, button_size, button_size)
@@ -70,33 +70,45 @@ class UIDrawer:
         self.save_button = pygame.Rect(x0 + 3 * (button_size + padding), y0,
                                        button_size, button_size)
 
-    def draw_buttons(self):
+        # Active button can be "play", "pause", "step", "save", or None.
+        self.active_button = None
+
+    def draw_buttons(self, a):
         """
         Draws the control buttons with the button background and centered icons.
+        If a button is active, draws a yellow border around it.
         """
-        # Draw background and icon for Play button.
+        # Draw Play button.
         self.screen.blit(self.button_bg, self.play_button.topleft)
         play_pos = (self.play_button.left + self.icon_offset[0],
                     self.play_button.top + self.icon_offset[1])
         self.screen.blit(self.play_icon, play_pos)
+        if self.active_button == "play":
+            pygame.draw.rect(self.screen, (255, 255, 0), self.play_button, 3)
 
-        # Draw background and icon for Pause button.
+        # Draw Pause button.
         self.screen.blit(self.button_bg, self.pause_button.topleft)
         pause_pos = (self.pause_button.left + self.icon_offset[0],
                      self.pause_button.top + self.icon_offset[1])
         self.screen.blit(self.pause_icon, pause_pos)
+        if self.active_button == "pause":
+            pygame.draw.rect(self.screen, (255, 255, 0), self.pause_button, 3)
 
-        # Draw background and icon for Step button.
+        # Draw Step button.
         self.screen.blit(self.button_bg, self.step_button.topleft)
         step_pos = (self.step_button.left + self.icon_offset[0],
                     self.step_button.top + self.icon_offset[1])
         self.screen.blit(self.step_icon, step_pos)
+        if self.active_button == "step":
+            pygame.draw.rect(self.screen, (255, 255, 0), self.step_button, 3)
 
-        # Draw background and icon for Save button.
+        # Draw Save button.
         self.screen.blit(self.button_bg, self.save_button.topleft)
         save_pos = (self.save_button.left + self.icon_offset[0],
                     self.save_button.top + self.icon_offset[1])
         self.screen.blit(self.save_icon, save_pos)
+        if self.active_button == "save":
+            pygame.draw.rect(self.screen, (255, 255, 0), self.save_button, 3)
 
     def handle_click(self, mouse_pos):
         """
