@@ -5,33 +5,57 @@ import pyarrow as pa
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-# Cache for simulation times
+# Global cache for simulation times and persistent writer.
 _simulation_times_cache = None
+_parquet_writer = None
+_export_file_path = None
 
 
 def init_export(export_path):
     """
-    Initialize the export directory for Parquet snapshots.
+    Initialize the export binary file for storing simulation snapshots in a single Parquet file.
+    Assumes export_path is a file name without folder path.
+    If export_path is empty, nothing is done.
     """
-    os.makedirs(export_path, exist_ok=True)  # Ensure directory exists
-    print(f"[Export] Initialized export directory: {export_path}")
+    global _parquet_writer, _export_file_path
+    if not export_path:
+        return
+    # Ensure the export file name ends with ".parquet"
+    if not export_path.endswith(".parquet"):
+        export_path += ".parquet"
+    # Remove the file if it already exists.
+    if os.path.exists(export_path):
+        os.remove(export_path)
+    _export_file_path = export_path
+    _parquet_writer = None  # We'll create the writer on the first export.
+    print(f"[Export] Initialized binary export file: {_export_file_path}")
 
 
-def export_snapshot(particles, export_path, sim_time, num_workers=4):
+def export_snapshot(particles, export_path, sim_time):
     """
-    Export a snapshot of the simulation's particle data to a Parquet file.
-
+    Append a snapshot of the simulation's particle data to a single Parquet file.
+    
     Parameters:
-    - particles: The Particles object.
-    - export_path: The directory where Parquet files are stored.
-    - sim_time: The current simulation time.
-    - num_workers: Number of threads for parallel export.
+      - particles: The Particles object.
+      - export_path: The file name (without folder) to store snapshots.
+      - sim_time: The current simulation time.
+    
+    This function uses a persistent ParquetWriter.
     """
-    num_particles = particles.num_particles
-    file_path = os.path.join(export_path, f"snapshot_{sim_time:.5f}.parquet")
+    global _parquet_writer, _export_file_path
+    if not export_path:
+        return
+    # Ensure the file name ends with ".parquet"
+    if not export_path.endswith(".parquet"):
+        file_path = export_path + ".parquet"
+    else:
+        file_path = export_path
 
-    # Prepare the data as a Pandas DataFrame
+    num_particles = particles.num_particles
+
+    # Prepare the data as a Pandas DataFrame.
     data = {
+        "sim_time": np.full(num_particles, sim_time, dtype=np.float64),
         "particle_index": np.arange(num_particles, dtype=np.int32),
         "x": particles.position[:, 0],
         "y": particles.position[:, 1],
@@ -42,30 +66,37 @@ def export_snapshot(particles, export_path, sim_time, num_workers=4):
         "alpha": particles.alpha,
         "type": particles.types
     }
-
     df = pd.DataFrame(data)
-    df.insert(0, "sim_time", sim_time)  # Add sim_time as the first column
-
-    # Write in parallel using PyArrow
     table = pa.Table.from_pandas(df)
-    pq.write_table(table, file_path, compression="snappy")
 
-    print(f"[Export] Snapshot saved: {file_path}")
+    # Create a ParquetWriter if needed.
+    if _parquet_writer is None:
+        _parquet_writer = pq.ParquetWriter(file_path,
+                                           table.schema,
+                                           compression="snappy")
+    _parquet_writer.write_table(table)
+
+
+def close_export():
+    """
+    Close the persistent Parquet writer if it exists.
+    """
+    global _parquet_writer
+    if _parquet_writer is not None:
+        _parquet_writer.close()
+        _parquet_writer = None
 
 
 def _get_simulation_times(export_path):
     """
-    Reads and caches available simulation times from Parquet snapshots.
+    Reads and caches available simulation times from the single Parquet file.
     """
     global _simulation_times_cache
     if _simulation_times_cache is None:
-        print(f"[Import] Caching simulation times from {export_path}...")
-        files = [
-            f for f in os.listdir(export_path) if f.startswith("snapshot_")
-        ]
-        times = sorted(
-            [float(f.split("_")[1].replace(".parquet", "")) for f in files])
-        _simulation_times_cache = np.array(times)  # Store as NumPy array
+        if not os.path.exists(export_path):
+            raise FileNotFoundError(f"Export file '{export_path}' not found.")
+        table = pq.read_table(export_path, columns=["sim_time"])
+        _simulation_times_cache = np.sort(table["sim_time"].to_numpy())
     return _simulation_times_cache
 
 
@@ -87,34 +118,36 @@ def _find_closest_time(available_times, target_time):
 
 def import_snapshot(export_path, sim_time):
     """
-    Efficiently imports a snapshot of particles from a Parquet file at the closest sim_time.
-
+    Efficiently imports a snapshot of particles from a single Parquet file at the closest sim_time.
+    
     Parameters:
-    - export_path (str): Directory containing Parquet snapshots.
-    - sim_time (float): The target simulation time. The function picks the closest available time.
-
+      - export_path (str): The file name (without folder) for the Parquet snapshots.
+      - sim_time (float): The target simulation time. The function picks the closest available time.
+    
     Returns:
-    - particles (Particles): A `Particles` object reconstructed at the closest `sim_time`.
+      - particles (Particles): A Particles object reconstructed at the closest sim_time.
     """
-    print(f"[Import] Loading snapshot for sim_time ≈ {sim_time:.3f}...")
+    if not export_path:
+        raise ValueError("Export path is empty. Cannot import snapshots.")
 
-    # Step 1: Get closest available time
-    available_times = _get_simulation_times(export_path)
+    # Ensure export_path ends with ".parquet"
+    if not export_path.endswith(".parquet"):
+        file_path = export_path + ".parquet"
+    else:
+        file_path = export_path
+
+    # Step 1: Get closest available time.
+    available_times = _get_simulation_times(file_path)
     closest_time = _find_closest_time(available_times, sim_time)
 
-    print(f"[Import] Closest recorded sim_time found: {closest_time:.3f}")
-
-    file_path = os.path.join(export_path,
-                             f"snapshot_{closest_time:.5f}.parquet")
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(
-            f"No snapshot file found for time {closest_time}")
-
-    # Step 2: Read the Parquet file
-    table = pq.read_table(file_path)
+    # Step 2: Read only the required rows.
+    table = pq.read_table(file_path,
+                          filters=[("sim_time", "==", closest_time)])
     df = table.to_pandas()
+    if df.empty:
+        raise ValueError(f"No data found for sim_time = {closest_time:.3f}")
 
-    # Step 3: Extract particle attributes
+    # Step 3: Extract particle attributes.
     indices = df["particle_index"].to_numpy(dtype=np.int32)
     positions = df[["x", "y"]].to_numpy(dtype=np.float64)
     velocities = df[["vx", "vy"]].to_numpy(dtype=np.float64)
@@ -123,7 +156,7 @@ def import_snapshot(export_path, sim_time):
     alpha = df["alpha"].to_numpy(dtype=np.float64)
     types = df["type"].to_numpy(dtype=np.int32)
 
-    # Step 4: Sort particles by index
+    # Step 4: Sort particles by index.
     sorted_indices = np.argsort(indices)
     positions = positions[sorted_indices]
     velocities = velocities[sorted_indices]
@@ -132,7 +165,7 @@ def import_snapshot(export_path, sim_time):
     alpha = alpha[sorted_indices]
     types = types[sorted_indices]
 
-    # Step 5: Construct the Particles object
+    # Step 5: Construct the Particles object.
     from dfsph.particles import Particles  # Import here to avoid circular imports
     num_particles = len(indices)
     particles = Particles(num_particles)
@@ -142,9 +175,5 @@ def import_snapshot(export_path, sim_time):
     particles.mass = mass
     particles.alpha = alpha
     particles.types = types
-
-    print(
-        f"[Import] Successfully loaded {num_particles} particles from sim_time = {closest_time:.3f}"
-    )
 
     return particles

@@ -99,13 +99,12 @@ def main():
     args = parser.parse_args()
 
     if args.import_results:
-        print(f"Loading simulation from file: {args.import_results}")
 
         # Load the first snapshot to get particle properties
         particles = import_snapshot(args.import_results, sim_time=0.0)
 
         num_particles = particles.num_particles
-        print(f"Loaded {num_particles} particles from CSV.")
+        print(f"Loading {num_particles} from file: {args.import_results}")
 
         if args.visualize:
             drawer = SPHDrawer(num_particles=num_particles,
