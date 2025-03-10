@@ -2,49 +2,47 @@ import numpy as np
 from numba import njit, prange
 from dfsph.kernels import grad_w
 
-
 @njit(parallel=True)
 def compute_intermediate_density_numba(density, position, velocity, mass,
                                        types, density_intermediate,
                                        neighbor_starts, neighbor_counts,
-                                       neighbor_indices, dt, h, rest_density):
+                                       neighbor_indices, dt, h, rest_density, box):
     n = density.shape[0]
     for i in prange(n):
+        if not box.is_inside(position[i, 0], position[i, 1]):
+            continue
         if types[i] != 0:
             continue  # Only fluid particles
         sum_component = 0.0
-        for idx in range(neighbor_starts[i],
-                         neighbor_starts[i] + neighbor_counts[i]):
+        for idx in range(neighbor_starts[i], neighbor_starts[i] + neighbor_counts[i]):
             j = neighbor_indices[idx]
             grad = grad_w(position[i], position[j], h)
             vij0 = velocity[i, 0] - velocity[j, 0]
             vij1 = velocity[i, 1] - velocity[j, 1]
             velocity_diff = vij0 * grad[0] + vij1 * grad[1]
             sum_component += mass[j] * velocity_diff
-
         density_intermediate_i = density[i] + dt * sum_component
         density_intermediate[i] = max(rest_density, density_intermediate_i)
-
 
 @njit(parallel=True)
 def adapt_velocity_density_numba(position, velocity, density, alpha,
                                  density_intermediate, mass, types,
                                  neighbor_starts, neighbor_counts,
-                                 neighbor_indices, dt, h, rest_density):
+                                 neighbor_indices, dt, h, rest_density, box):
     n = velocity.shape[0]
     dt2 = dt * dt
     for i in prange(n):
+        if not box.is_inside(position[i, 0], position[i, 1]):
+            continue
         if types[i] != 0:
             continue
         if neighbor_counts[i] < 7:
             continue
-
         p_i = (density_intermediate[i] - rest_density) * alpha[i] / dt2
         p_div_rho_i = p_i / density[i]
         vel_corr0 = 0.0
         vel_corr1 = 0.0
-        for idx in range(neighbor_starts[i],
-                         neighbor_starts[i] + neighbor_counts[i]):
+        for idx in range(neighbor_starts[i], neighbor_starts[i] + neighbor_counts[i]):
             j = neighbor_indices[idx]
             gradwij = grad_w(position[i], position[j], h)
             if types[j] == 0:
@@ -60,55 +58,49 @@ def adapt_velocity_density_numba(position, velocity, density, alpha,
         velocity[i, 0] -= dt * vel_corr0
         velocity[i, 1] -= dt * vel_corr1
 
-
 @njit(parallel=True)
 def compute_density_derivative_numba(density, position, velocity, mass, types,
                                      density_derivative, neighbor_starts,
                                      neighbor_counts, neighbor_indices, dt, h,
-                                     rest_density):
+                                     rest_density, box):
     n = density.shape[0]
     for i in prange(n):
+        if not box.is_inside(position[i, 0], position[i, 1]):
+            continue
         if types[i] != 0:
             continue
-        # For fluid particles, compute derivative
         sum_deriv = 0.0
-        for idx in range(neighbor_starts[i],
-                         neighbor_starts[i] + neighbor_counts[i]):
+        for idx in range(neighbor_starts[i], neighbor_starts[i] + neighbor_counts[i]):
             j = neighbor_indices[idx]
             gradwij = grad_w(position[i], position[j], h)
-            # Compute relative velocity
             vij0 = velocity[i, 0] - velocity[j, 0]
             vij1 = velocity[i, 1] - velocity[j, 1]
             sum_deriv += mass[j] * (vij0 * gradwij[0] + vij1 * gradwij[1])
-
         density_derivative[i] = max(0, sum_deriv)
     return density_derivative
-
 
 @njit(parallel=True)
 def adapt_velocity_divergence_free_numba(position, velocity, density, alpha,
                                          mass, types, density_derivative,
                                          neighbor_starts, neighbor_counts,
                                          neighbor_indices, dt, h,
-                                         rest_density):
+                                         rest_density, box):
     n = position.shape[0]
-    # For each fluid particle, update its velocity to reduce divergence.
     for i in prange(n):
+        if not box.is_inside(position[i, 0], position[i, 1]):
+            continue
         if types[i] != 0:
             continue
         if neighbor_counts[i] < 7:
             continue
         rho_i = density[i]
-
         kappaI = density_derivative[i] * alpha[i] / dt
         kappaIDivRhoI = kappaI / rho_i
         vel_corr0 = 0.0
         vel_corr1 = 0.0
-        for idx in range(neighbor_starts[i],
-                         neighbor_starts[i] + neighbor_counts[i]):
+        for idx in range(neighbor_starts[i], neighbor_starts[i] + neighbor_counts[i]):
             j = neighbor_indices[idx]
             gradwij = grad_w(position[i], position[j], h)
-
             if types[j] == 0:
                 kappaJ = density_derivative[j] * alpha[j] / dt
                 kappaJDivRhoJ = kappaJ / density[j]
