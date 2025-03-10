@@ -33,7 +33,7 @@ def compute_density_alpha_numba(positions, masses, neighbor_indices,
         density_fluid = max(density_fluid, min_density)
         densities[i] = density_fluid
         norm = sum_abs0**2 + sum_abs1**2
-        alphas[i] = density_fluid / (norm + abs_sum + 1e-5)
+        alphas[i] = max(0, density_fluid / (norm + abs_sum + 1e-5))
 
     return densities, alphas
 

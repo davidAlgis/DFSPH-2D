@@ -36,6 +36,8 @@ def adapt_velocity_density_numba(position, velocity, density, alpha,
     for i in prange(n):
         if types[i] != 0:
             continue
+        if neighbor_counts[i] < 7:
+            continue
 
         p_i = (density_intermediate[i] - rest_density) * alpha[i] / dt2
         p_div_rho_i = p_i / density[i]
@@ -47,6 +49,7 @@ def adapt_velocity_density_numba(position, velocity, density, alpha,
             gradwij = grad_w(position[i], position[j], h)
             if types[j] == 0:
                 p_j = (density_intermediate[j] - rest_density) * alpha[j] / dt2
+                p_j = max(0, p_j)
                 scalar = mass[i] * (p_div_rho_i + p_j / density[j])
                 vel_corr0 += scalar * gradwij[0]
                 vel_corr1 += scalar * gradwij[1]
@@ -92,6 +95,8 @@ def adapt_velocity_divergence_free_numba(position, velocity, density, alpha,
     # For each fluid particle, update its velocity to reduce divergence.
     for i in prange(n):
         if types[i] != 0:
+            continue
+        if neighbor_counts[i] < 7:
             continue
         rho_i = density[i]
 

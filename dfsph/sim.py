@@ -136,6 +136,21 @@ class DFSPHSim:
         Solid particles remain static.
         """
         fluid_mask = (self.particles.types == 0)
+        vel_max = np.zeros(2)
+        vel_max[0] = 0
+        vel_max[1] = -0.25 * self.grid.grid_size[1]
+        for i in range(self.num_particles):
+            if self.particles.types[i] != 0:
+                continue  # Only fluid particles
+            if self.particles.neighbor_counts[i] < 7:
+                self.particles.velocity[i, 0] = vel_max[0]
+                self.particles.velocity[i,
+                                        1] = min(0, self.particles.velocity[i,
+                                                                            1])
+                vel_y_grav_only = self.particles.velocity[
+                    i, 1] + self.dt * self.particles.external_forces[i, 1] / (
+                        self.particles.mass[i])
+                self.particles.velocity[i, 1] = vel_y_grav_only
         self.particles.position[
             fluid_mask] += self.particles.velocity[fluid_mask] * self.dt
 
