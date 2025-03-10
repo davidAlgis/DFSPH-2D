@@ -96,7 +96,7 @@ class SPHDrawer:
 
     def _create_grid_surface(self):
         """
-        Pre-render the grid lines and border to a Surface.
+        Pre-render the grid lines and border to a Surface, then draw extra white lines at x=0 and y=0.
         """
         grid_surface = pygame.Surface((self.width, self.height))
         grid_surface.fill(self.bg_color)
@@ -106,7 +106,7 @@ class SPHDrawer:
         top_left = self.world_to_screen(self.grid_origin)
         bottom_right = self.world_to_screen(self.grid_origin + self.grid_size)
 
-        # Draw vertical grid lines.
+        # Draw standard vertical grid lines.
         for i in range(num_cells_x + 1):
             world_x = self.grid_origin[0] + i * self.cell_size
             screen_x, _ = self.world_to_screen((world_x, self.grid_origin[1]))
@@ -114,7 +114,7 @@ class SPHDrawer:
                              (screen_x, bottom_right[1]),
                              (screen_x, top_left[1]), 1)
 
-        # Draw horizontal grid lines.
+        # Draw standard horizontal grid lines.
         for j in range(num_cells_y + 1):
             world_y = self.grid_origin[1] + j * self.cell_size
             _, screen_y = self.world_to_screen((self.grid_origin[0], world_y))
@@ -122,10 +122,28 @@ class SPHDrawer:
                              (top_left[0], screen_y),
                              (bottom_right[0], screen_y), 1)
 
-        # Draw border.
+        # Draw the border.
         pygame.draw.rect(grid_surface, self.border_color,
                          (top_left[0], bottom_right[1], bottom_right[0] -
                           top_left[0], top_left[1] - bottom_right[1]), 2)
+
+        # Draw the extra origin lines in white, if the origin is within the grid.
+        # Vertical line for x = 0.
+        if self.grid_origin[0] <= 0 <= (self.grid_origin[0] +
+                                        self.grid_size[0]):
+            screen_x, _ = self.world_to_screen((0, self.grid_origin[1]))
+            pygame.draw.line(grid_surface, (255, 255, 255),
+                             (screen_x, bottom_right[1]),
+                             (screen_x, top_left[1]), 2)
+
+        # Horizontal line for y = 0.
+        if self.grid_origin[1] <= 0 <= (self.grid_origin[1] +
+                                        self.grid_size[1]):
+            _, screen_y = self.world_to_screen((self.grid_origin[0], 0))
+            pygame.draw.line(grid_surface, (255, 255, 255),
+                             (top_left[0], screen_y),
+                             (bottom_right[0], screen_y), 2)
+
         return grid_surface
 
     def set_particles(self, particles):
