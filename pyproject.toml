@@ -17,6 +17,7 @@ dependencies = [
     "pygame",
     "numba",
     "pyarrow",
+    "pandas",
 ]
 
 [project.optional-dependencies]
