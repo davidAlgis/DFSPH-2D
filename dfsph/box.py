@@ -11,6 +11,12 @@ box_spec = [
 ]
 
 
+def box_repr(box):
+    return (
+        f"Box(origin_x={box.origin_x}, origin_y={box.origin_y}, "
+        f"size_x={box.size_x}, size_y={box.size_y})"
+    )
+
 # Define the Box class
 @jitclass(box_spec)
 class Box:
