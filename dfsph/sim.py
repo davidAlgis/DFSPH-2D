@@ -42,18 +42,20 @@ class DFSPHSim:
         )
         self.gravity = np.array([0, -9.81], dtype=np.float64)
 
-        # Initial neighbor search and density/alpha computation using the box.
+        # Create a Box corresponding to the grid.
         box = Box(
             self.grid.grid_origin[0],
             self.grid.grid_origin[1],
             self.grid.grid_size[0],
             self.grid.grid_size[1],
         )
+        # For now, we assume an empty "box_not" (a box that covers no area).
+        box_not = Box(0.0, 0.0, 0.0, 0.0)
         self.find_neighbors()
-        self.compute_density_and_alpha(box)
-        self.update_mass_solid(box)
+        self.compute_density_and_alpha(box, box_not)
+        self.update_mass_solid(box, box_not)
 
-    def compute_density_and_alpha(self, box: Box):
+    def compute_density_and_alpha(self, box: Box, box_not: Box):
         densities, alphas = sphjit.compute_density_alpha_numba(
             self.particles.position.astype(np.float64),
             self.particles.mass,
@@ -63,19 +65,25 @@ class DFSPHSim:
             self.h,
             self.rest_density,
             box,
+            box_not,
         )
         self.particles.density[:] = densities
         self.particles.alpha[:] = alphas
         self.mean_density = np.mean(densities)
 
-    def compute_pressure_wcsph(self, B=1000.0, gamma=7, box: Box = None):
-        if box is None:
+    def compute_pressure_wcsph(
+        self, B=1000.0, gamma=7, box: Box = None, box_not: Box = None
+    ):
+        if box is None or box_not is None:
             self.particles.pressure[:] = B * (
                 (self.particles.density / self.rest_density) ** gamma - 1
             )
         else:
             for i in range(self.num_particles):
                 if box.is_inside(
+                    self.particles.position[i, 0],
+                    self.particles.position[i, 1],
+                ) and not box_not.is_inside(
                     self.particles.position[i, 0],
                     self.particles.position[i, 1],
                 ):
@@ -85,7 +93,7 @@ class DFSPHSim:
                         - 1
                     )
 
-    def update_mass_solid(self, box: Box):
+    def update_mass_solid(self, box: Box, box_not: Box):
         new_masses = sphjit.update_mass_solid_numba(
             self.particles.position.astype(np.float64),
             (self.particles.types == 1).astype(np.int32),
@@ -97,12 +105,13 @@ class DFSPHSim:
             self.gamma_mass_solid,
             self.particles.mass.copy(),
             box,
+            box_not,
         )
         self.particles.mass[self.particles.types == 1] = new_masses[
             self.particles.types == 1
         ]
 
-    def compute_viscosity_forces(self, box: Box):
+    def compute_viscosity_forces(self, box: Box, box_not: Box):
         vis_forces = sphjit.compute_viscosity_forces_updated_numba(
             self.particles.position.astype(np.float64),
             self.particles.velocity.astype(np.float64),
@@ -116,10 +125,11 @@ class DFSPHSim:
             self.water_viscosity,
             0.01,  # Viscosity coefficient for solid
             box,
+            box_not,
         )
         self.particles.viscosity_forces[:] = vis_forces
 
-    def compute_pressure_forces_wcsph(self, box: Box):
+    def compute_pressure_forces_wcsph(self, box: Box, box_not: Box):
         p_forces = sphjit.compute_pressure_forces_updated_numba(
             self.particles.position.astype(np.float64),
             (self.particles.types == 1).astype(np.int32),
@@ -131,10 +141,11 @@ class DFSPHSim:
             self.particles.neighbor_counts,
             self.h,
             box,
+            box_not,
         )
         self.particles.pressure_forces[:] = p_forces
 
-    def compute_surface_tension_forces(self, box: Box):
+    def compute_surface_tension_forces(self, box: Box, box_not: Box):
         surf_forces = sphjit.compute_surface_tension_forces_updated_numba(
             self.particles.position.astype(np.float64),
             self.particles.velocity.astype(np.float64),
@@ -147,15 +158,18 @@ class DFSPHSim:
             self.h,
             self.surface_tension_coeff,
             box,
+            box_not,
         )
         self.particles.surface_tension_forces[:] = surf_forces
 
-    def predict_intermediate_velocity(self, box: Box):
+    def predict_intermediate_velocity(self, box: Box, box_not: Box):
         fluid_mask = self.particles.types == 0
         for i in range(self.num_particles):
             if not fluid_mask[i]:
                 continue
             if not box.is_inside(
+                self.particles.position[i, 0], self.particles.position[i, 1]
+            ) or box_not.is_inside(
                 self.particles.position[i, 0], self.particles.position[i, 1]
             ):
                 continue
@@ -173,13 +187,15 @@ class DFSPHSim:
                 continue
             if not box.is_inside(
                 self.particles.position[i, 0], self.particles.position[i, 1]
+            ) or box_not.is_inside(
+                self.particles.position[i, 0], self.particles.position[i, 1]
             ):
                 continue
             self.particles.velocity[i] += (
                 total_force[i] / self.particles.mass[i]
             ) * self.dt
 
-    def integrate(self, box: Box):
+    def integrate(self, box: Box, box_not: Box):
         fluid_mask = self.particles.types == 0
         vel_max = np.zeros(2)
         vel_max[0] = 0
@@ -188,6 +204,8 @@ class DFSPHSim:
             if self.particles.types[i] != 0:
                 continue
             if not box.is_inside(
+                self.particles.position[i, 0], self.particles.position[i, 1]
+            ) or box_not.is_inside(
                 self.particles.position[i, 0], self.particles.position[i, 1]
             ):
                 continue
@@ -207,13 +225,17 @@ class DFSPHSim:
             self.particles.velocity[fluid_mask] * self.dt
         )
 
-    def apply_boundary_penalty(self, box: Box, collider_damping=0.5):
+    def apply_boundary_penalty(
+        self, box: Box, box_not: Box, collider_damping=0.5
+    ):
         bottom, top = self.get_bottom_and_top()
         damping_factor = -collider_damping
         for i in range(self.num_particles):
             if self.particles.types[i] != 0:
                 continue
             if not box.is_inside(
+                self.particles.position[i, 0], self.particles.position[i, 1]
+            ) or box_not.is_inside(
                 self.particles.position[i, 0], self.particles.position[i, 1]
             ):
                 continue
@@ -250,7 +272,7 @@ class DFSPHSim:
         self.particles.pressure_forces.fill(0)
         self.particles.surface_tension_forces.fill(0)
 
-    def compute_intermediate_density(self, box: Box):
+    def compute_intermediate_density(self, box: Box, box_not: Box):
         dfsph_pressure_solvers.compute_intermediate_density_numba(
             self.particles.density,
             self.particles.position,
@@ -265,9 +287,10 @@ class DFSPHSim:
             self.h,
             self.rest_density,
             box,
+            box_not,
         )
 
-    def adapt_velocity_density(self, box: Box):
+    def adapt_velocity_density(self, box: Box, box_not: Box):
         dfsph_pressure_solvers.adapt_velocity_density_numba(
             self.particles.position,
             self.particles.velocity,
@@ -283,12 +306,13 @@ class DFSPHSim:
             self.h,
             self.rest_density,
             box,
+            box_not,
         )
 
-    def solve_constant_density(self, box: Box):
+    def solve_constant_density(self, box: Box, box_not: Box):
         max_iter = 24
         for iteration in range(max_iter):
-            self.compute_intermediate_density(box)
+            self.compute_intermediate_density(box, box_not)
             fluid_mask = self.particles.types == 0
             density_errors = np.mean(
                 np.abs(
@@ -299,13 +323,13 @@ class DFSPHSim:
             avg_error = np.mean(density_errors)
             if avg_error < 1e-3 * self.rest_density:
                 break
-            self.adapt_velocity_density(box)
+            self.adapt_velocity_density(box, box_not)
         if iteration >= max_iter - 1:
             print(
                 f"[Density Solver]: Max iteration reached! avg error = {avg_error:.3f}"
             )
 
-    def compute_density_derivative(self, box: Box):
+    def compute_density_derivative(self, box: Box, box_not: Box):
         dfsph_pressure_solvers.compute_density_derivative_numba(
             self.particles.density,
             self.particles.position,
@@ -320,9 +344,10 @@ class DFSPHSim:
             self.h,
             self.rest_density,
             box,
+            box_not,
         )
 
-    def adapt_velocity_divergence_free(self, box: Box):
+    def adapt_velocity_divergence_free(self, box: Box, box_not: Box):
         dfsph_pressure_solvers.adapt_velocity_divergence_free_numba(
             self.particles.position,
             self.particles.velocity,
@@ -338,9 +363,10 @@ class DFSPHSim:
             self.h,
             self.rest_density,
             box,
+            box_not,
         )
 
-    def solve_divergence_free(self, box: Box):
+    def solve_divergence_free(self, box: Box, box_not: Box):
         threshold_divergence = 1e-3 * self.rest_density / self.dt
         max_iter = 24
         iter_count = 0
@@ -348,8 +374,8 @@ class DFSPHSim:
         while (iter_count < max_iter) and (
             abs(density_derivative_avg) > threshold_divergence
         ):
-            self.compute_density_derivative(box)
-            self.adapt_velocity_divergence_free(box)
+            self.compute_density_derivative(box, box_not)
+            self.adapt_velocity_divergence_free(box, box_not)
             fluid_mask = self.particles.types == 0
             density_derivative_avg = np.mean(
                 np.abs(self.particles.density_derivative[fluid_mask])
@@ -373,23 +399,25 @@ class DFSPHSim:
     def update(self):
         from dfsph.box import Box
 
-        # Create a Box from the grid parameters.
+        # Create a Box from the grid parameters and an "empty" box_not.
         box = Box(
             self.grid.grid_origin[0],
             self.grid.grid_origin[1],
             self.grid.grid_size[0],
             self.grid.grid_size[1],
         )
+        # For box_not we assume an empty region; you can adjust as needed.
+        box_not = Box(0.0, 0.0, 0.0, 0.0)
         self.adapt_dt_for_cfl()
         self.reset_forces()
 
-        self.compute_viscosity_forces(box)
-        self.predict_intermediate_velocity(box)
-        self.solve_constant_density(box)
-        self.integrate(box)
-        self.apply_boundary_penalty(box)
+        self.compute_viscosity_forces(box, box_not)
+        self.predict_intermediate_velocity(box, box_not)
+        self.solve_constant_density(box, box_not)
+        self.integrate(box, box_not)
+        self.apply_boundary_penalty(box, box_not)
         self.find_neighbors()
-        self.compute_density_and_alpha(box)
-        self.solve_divergence_free(box)
+        self.compute_density_and_alpha(box, box_not)
+        self.solve_divergence_free(box, box_not)
         self.sim_time += self.dt
         self.export_data()

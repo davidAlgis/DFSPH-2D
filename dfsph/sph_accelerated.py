@@ -13,6 +13,7 @@ def compute_density_alpha_numba(
     h,
     rest_density,
     box,
+    box_not,
 ):
     n = positions.shape[0]
     densities = np.empty(n, dtype=np.float64)
@@ -20,7 +21,9 @@ def compute_density_alpha_numba(
     min_density = rest_density / 100.0
 
     for i in prange(n):
-        if not box.is_inside(positions[i, 0], positions[i, 1]):
+        if not box.is_inside(
+            positions[i, 0], positions[i, 1]
+        ) or box_not.is_inside(positions[i, 0], positions[i, 1]):
             densities[i] = 0.0
             alphas[i] = 0.0
             continue
@@ -61,11 +64,14 @@ def compute_viscosity_forces_updated_numba(
     water_viscosity,
     viscosity_coefficient_solid,
     box,
+    box_not,
 ):
     n = positions.shape[0]
     viscosity_forces = np.zeros((n, 2), dtype=np.float64)
     for i in prange(n):
-        if not box.is_inside(positions[i, 0], positions[i, 1]):
+        if not box.is_inside(
+            positions[i, 0], positions[i, 1]
+        ) or box_not.is_inside(positions[i, 0], positions[i, 1]):
             continue
         if is_solid[i] == 1:
             continue
@@ -112,10 +118,13 @@ def update_mass_solid_numba(
     gamma_mass_solid,
     masses_out,
     box,
+    box_not,
 ):
     n = positions.shape[0]
     for i in prange(n):
-        if not box.is_inside(positions[i, 0], positions[i, 1]):
+        if not box.is_inside(
+            positions[i, 0], positions[i, 1]
+        ) or box_not.is_inside(positions[i, 0], positions[i, 1]):
             continue
         if is_solid[i] == 1:
             start = neighbor_starts[i]
@@ -142,11 +151,14 @@ def compute_pressure_forces_updated_numba(
     neighbor_counts,
     h,
     box,
+    box_not,
 ):
     n = positions.shape[0]
     pressure_forces = np.zeros((n, 2), dtype=np.float64)
     for i in prange(n):
-        if not box.is_inside(positions[i, 0], positions[i, 1]):
+        if not box.is_inside(
+            positions[i, 0], positions[i, 1]
+        ) or box_not.is_inside(positions[i, 0], positions[i, 1]):
             continue
         if is_solid[i] == 1:
             continue
@@ -185,11 +197,14 @@ def compute_surface_tension_forces_updated_numba(
     h,
     surface_tension_coeff,
     box,
+    box_not,
 ):
     n = positions.shape[0]
     surf_forces = np.zeros((n, 2), dtype=np.float64)
     for i in prange(n):
-        if not box.is_inside(positions[i, 0], positions[i, 1]):
+        if not box.is_inside(
+            positions[i, 0], positions[i, 1]
+        ) or box_not.is_inside(positions[i, 0], positions[i, 1]):
             continue
         if is_solid[i] == 1:
             continue

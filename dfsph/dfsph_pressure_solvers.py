@@ -18,10 +18,13 @@ def compute_intermediate_density_numba(
     h,
     rest_density,
     box,
+    box_not,
 ):
     n = density.shape[0]
     for i in prange(n):
-        if not box.is_inside(position[i, 0], position[i, 1]):
+        if not box.is_inside(
+            position[i, 0], position[i, 1]
+        ) or box_not.is_inside(position[i, 0], position[i, 1]):
             continue
         if types[i] != 0:
             continue  # Only fluid particles
@@ -55,11 +58,14 @@ def adapt_velocity_density_numba(
     h,
     rest_density,
     box,
+    box_not,
 ):
     n = velocity.shape[0]
     dt2 = dt * dt
     for i in prange(n):
-        if not box.is_inside(position[i, 0], position[i, 1]):
+        if not box.is_inside(
+            position[i, 0], position[i, 1]
+        ) or box_not.is_inside(position[i, 0], position[i, 1]):
             continue
         if types[i] != 0:
             continue
@@ -103,10 +109,13 @@ def compute_density_derivative_numba(
     h,
     rest_density,
     box,
+    box_not,
 ):
     n = density.shape[0]
     for i in prange(n):
-        if not box.is_inside(position[i, 0], position[i, 1]):
+        if not box.is_inside(
+            position[i, 0], position[i, 1]
+        ) or box_not.is_inside(position[i, 0], position[i, 1]):
             continue
         if types[i] != 0:
             continue
@@ -139,10 +148,13 @@ def adapt_velocity_divergence_free_numba(
     h,
     rest_density,
     box,
+    box_not,
 ):
     n = position.shape[0]
     for i in prange(n):
-        if not box.is_inside(position[i, 0], position[i, 1]):
+        if not box.is_inside(
+            position[i, 0], position[i, 1]
+        ) or box_not.is_inside(position[i, 0], position[i, 1]):
             continue
         if types[i] != 0:
             continue
