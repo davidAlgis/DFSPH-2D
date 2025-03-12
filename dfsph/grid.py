@@ -1,7 +1,8 @@
-import numpy as np
-from collections import defaultdict
-from numba import njit
 import math
+from collections import defaultdict
+
+import numpy as np
+from numba import njit
 
 
 @njit
@@ -10,9 +11,11 @@ def compute_cell_indices_numba(positions, grid_origin, cell_size):
     cell_indices = np.empty((n, 2), dtype=np.int64)
     for i in range(n):
         cell_indices[i, 0] = int(
-            math.floor((positions[i, 0] - grid_origin[0]) / cell_size))
+            math.floor((positions[i, 0] - grid_origin[0]) / cell_size)
+        )
         cell_indices[i, 1] = int(
-            math.floor((positions[i, 1] - grid_origin[1]) / cell_size))
+            math.floor((positions[i, 1] - grid_origin[1]) / cell_size)
+        )
     return cell_indices
 
 
@@ -34,8 +37,10 @@ def find_neighbors_numba(positions, cell_indices, search_radius, cell_size):
         for j in range(n):
             if i == j:
                 continue
-            if (abs(cell_indices[j, 0] - cell_i0) <= search_cells
-                    and abs(cell_indices[j, 1] - cell_i1) <= search_cells):
+            if (
+                abs(cell_indices[j, 0] - cell_i0) <= search_cells
+                and abs(cell_indices[j, 1] - cell_i1) <= search_cells
+            ):
                 dx = positions[i, 0] - positions[j, 0]
                 dy = positions[i, 1] - positions[j, 1]
                 if dx * dx + dy * dy < search_radius_sq:
@@ -54,8 +59,10 @@ def find_neighbors_numba(positions, cell_indices, search_radius, cell_size):
         for j in range(n):
             if i == j:
                 continue
-            if (abs(cell_indices[j, 0] - cell_i0) <= search_cells
-                    and abs(cell_indices[j, 1] - cell_i1) <= search_cells):
+            if (
+                abs(cell_indices[j, 0] - cell_i0) <= search_cells
+                and abs(cell_indices[j, 1] - cell_i1) <= search_cells
+            ):
                 dx = positions[i, 0] - positions[j, 0]
                 dy = positions[i, 1] - positions[j, 1]
                 if dx * dx + dy * dy < search_radius_sq:
@@ -76,7 +83,8 @@ class Grid:
 
     def _compute_cell_index(self, position):
         cell_idx = np.floor(
-            (position - self.grid_origin) * self.inv_cell_size).astype(int)
+            (position - self.grid_origin) * self.inv_cell_size
+        ).astype(int)
         return tuple(cell_idx)
 
     def insert_particles(self, particles):
@@ -88,10 +96,14 @@ class Grid:
     def find_neighbors(self, particles, search_radius):
         # Use Numba-accelerated functions (ensure positions are float64)
         positions = particles.position.astype(np.float64)
-        cell_indices = compute_cell_indices_numba(positions, self.grid_origin,
-                                                  self.cell_size)
-        neighbor_indices, neighbor_counts, neighbor_starts = find_neighbors_numba(
-            positions, cell_indices, search_radius, self.cell_size)
+        cell_indices = compute_cell_indices_numba(
+            positions, self.grid_origin, self.cell_size
+        )
+        neighbor_indices, neighbor_counts, neighbor_starts = (
+            find_neighbors_numba(
+                positions, cell_indices, search_radius, self.cell_size
+            )
+        )
 
         # Reconstruct a list-of-lists structure (if needed for legacy use)
         n = particles.num_particles
@@ -99,7 +111,9 @@ class Grid:
         for i in range(n):
             start = neighbor_starts[i]
             count = neighbor_counts[i]
-            neighbors_list.append(list(neighbor_indices[start:start + count]))
+            neighbors_list.append(
+                list(neighbor_indices[start : start + count])
+            )
 
         # Update particle neighbor data
         particles.neighbors = neighbors_list

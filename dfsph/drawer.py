@@ -1,28 +1,31 @@
 import os
-import pygame
-import numpy as np
 import threading
 import time
 import tkinter as tk
 from tkinter import filedialog
+
+import numpy as np
+import pygame
 from dfsph.drawer_ui import UIDrawer
 from dfsph.kernels import w
-from dfsph.particles_loader import import_snapshot, export_snapshot
+from dfsph.particles_loader import export_snapshot, import_snapshot
 
 
 class SPHDrawer:
 
-    def __init__(self,
-                 num_particles,
-                 grid_origin,
-                 grid_size,
-                 support_radius,
-                 cell_size,
-                 import_path="",
-                 width=600,
-                 height=600,
-                 particle_radius=3,
-                 density_range=(500, 1500)):
+    def __init__(
+        self,
+        num_particles,
+        grid_origin,
+        grid_size,
+        support_radius,
+        cell_size,
+        import_path="",
+        width=600,
+        height=600,
+        particle_radius=3,
+        density_range=(500, 1500),
+    ):
         """
         Initialize the Pygame visualization for SPH particles.
         If `import_path` is set, particles will be loaded from a binary file instead of a live simulation.
@@ -37,8 +40,9 @@ class SPHDrawer:
         # Set screen size based on grid size (maintaining aspect ratio).
         aspect_ratio = self.grid_size[0] / self.grid_size[1]
         self.width = width
-        self.height = int(width /
-                          aspect_ratio) if aspect_ratio >= 1 else height
+        self.height = (
+            int(width / aspect_ratio) if aspect_ratio >= 1 else height
+        )
         self.particle_radius = particle_radius
 
         # Precompute scaling factors for world-to-screen conversion.
@@ -47,7 +51,8 @@ class SPHDrawer:
 
         # Initialize the screen.
         self.screen = pygame.display.set_mode(
-            (self.width, self.height), pygame.DOUBLEBUF | pygame.HWSURFACE)
+            (self.width, self.height), pygame.DOUBLEBUF | pygame.HWSURFACE
+        )
         pygame.display.set_caption("DFSPH Visualization")
 
         # Colors.
@@ -63,11 +68,9 @@ class SPHDrawer:
         self.clock = pygame.time.Clock()
 
         # Create UI drawer.
-        self.ui = UIDrawer(self.screen,
-                           self.width,
-                           self.height,
-                           button_size=30,
-                           padding=5)
+        self.ui = UIDrawer(
+            self.screen, self.width, self.height, button_size=30, padding=5
+        )
         # We'll use self.ui.active_button to highlight the current state.
         self.ui.active_button = None
 
@@ -110,39 +113,69 @@ class SPHDrawer:
         for i in range(num_cells_x + 1):
             world_x = self.grid_origin[0] + i * self.cell_size
             screen_x, _ = self.world_to_screen((world_x, self.grid_origin[1]))
-            pygame.draw.line(grid_surface, self.grid_color,
-                             (screen_x, bottom_right[1]),
-                             (screen_x, top_left[1]), 1)
+            pygame.draw.line(
+                grid_surface,
+                self.grid_color,
+                (screen_x, bottom_right[1]),
+                (screen_x, top_left[1]),
+                1,
+            )
 
         # Draw standard horizontal grid lines.
         for j in range(num_cells_y + 1):
             world_y = self.grid_origin[1] + j * self.cell_size
             _, screen_y = self.world_to_screen((self.grid_origin[0], world_y))
-            pygame.draw.line(grid_surface, self.grid_color,
-                             (top_left[0], screen_y),
-                             (bottom_right[0], screen_y), 1)
+            pygame.draw.line(
+                grid_surface,
+                self.grid_color,
+                (top_left[0], screen_y),
+                (bottom_right[0], screen_y),
+                1,
+            )
 
         # Draw the border.
-        pygame.draw.rect(grid_surface, self.border_color,
-                         (top_left[0], bottom_right[1], bottom_right[0] -
-                          top_left[0], top_left[1] - bottom_right[1]), 2)
+        pygame.draw.rect(
+            grid_surface,
+            self.border_color,
+            (
+                top_left[0],
+                bottom_right[1],
+                bottom_right[0] - top_left[0],
+                top_left[1] - bottom_right[1],
+            ),
+            2,
+        )
 
         # Draw the extra origin lines in white, if the origin is within the grid.
         # Vertical line for x = 0.
-        if self.grid_origin[0] <= 0 <= (self.grid_origin[0] +
-                                        self.grid_size[0]):
+        if (
+            self.grid_origin[0]
+            <= 0
+            <= (self.grid_origin[0] + self.grid_size[0])
+        ):
             screen_x, _ = self.world_to_screen((0, self.grid_origin[1]))
-            pygame.draw.line(grid_surface, (255, 255, 255),
-                             (screen_x, bottom_right[1]),
-                             (screen_x, top_left[1]), 2)
+            pygame.draw.line(
+                grid_surface,
+                (255, 255, 255),
+                (screen_x, bottom_right[1]),
+                (screen_x, top_left[1]),
+                2,
+            )
 
         # Horizontal line for y = 0.
-        if self.grid_origin[1] <= 0 <= (self.grid_origin[1] +
-                                        self.grid_size[1]):
+        if (
+            self.grid_origin[1]
+            <= 0
+            <= (self.grid_origin[1] + self.grid_size[1])
+        ):
             _, screen_y = self.world_to_screen((self.grid_origin[0], 0))
-            pygame.draw.line(grid_surface, (255, 255, 255),
-                             (top_left[0], screen_y),
-                             (bottom_right[0], screen_y), 2)
+            pygame.draw.line(
+                grid_surface,
+                (255, 255, 255),
+                (top_left[0], screen_y),
+                (bottom_right[0], screen_y),
+                2,
+            )
 
         return grid_surface
 
@@ -159,10 +192,14 @@ class SPHDrawer:
         if np.isnan(world_pos[0]) or np.isnan(world_pos[1]):
             return (-100, -100)
         screen_x = int(
-            round((world_pos[0] - self.grid_origin[0]) * self.scale_x))
+            round((world_pos[0] - self.grid_origin[0]) * self.scale_x)
+        )
         screen_y = int(
-            round((self.grid_size[1] - (world_pos[1] - self.grid_origin[1])) *
-                  self.scale_y))
+            round(
+                (self.grid_size[1] - (world_pos[1] - self.grid_origin[1]))
+                * self.scale_y
+            )
+        )
         return screen_x, screen_y
 
     def screen_to_world(self, screen_pos):
@@ -194,9 +231,13 @@ class SPHDrawer:
         if self.highlighted_index is not None:
             if particle_index == self.highlighted_index:
                 return (255, 0, 0)
-            elif particle_index in self.highlighted_neighbors and self.selected_particle_pos is not None:
-                selected_pos = np.array(self.selected_particle_pos,
-                                        dtype=float)
+            elif (
+                particle_index in self.highlighted_neighbors
+                and self.selected_particle_pos is not None
+            ):
+                selected_pos = np.array(
+                    self.selected_particle_pos, dtype=float
+                )
                 current_pos = np.array(pos, dtype=float)
                 w_val = w(selected_pos, current_pos, self.h)
                 w_max = w(selected_pos, selected_pos, self.h)
@@ -229,8 +270,9 @@ class SPHDrawer:
             else:
                 density = self.particles.density[i]
                 color = self.get_particle_color(density, i, pos)
-            pygame.draw.circle(self.screen, color, (screen_x, screen_y),
-                               self.particle_radius)
+            pygame.draw.circle(
+                self.screen, color, (screen_x, screen_y), self.particle_radius
+            )
 
         # Draw a highlight circle for the selected particle.
         if self.highlighted_index is not None and self.h is not None:
@@ -238,14 +280,16 @@ class SPHDrawer:
             center = self.world_to_screen(pos)
             scale = min(self.scale_x, self.scale_y)
             circle_radius = int(self.h * scale)
-            pygame.draw.circle(self.screen, (255, 255, 255), center,
-                               circle_radius, 2)
+            pygame.draw.circle(
+                self.screen, (255, 255, 255), center, circle_radius, 2
+            )
 
         self.draw_buttons()
 
         # Render simulation time at the top left corner.
-        time_text = self.font.render(f"Time: {self.sim_time:.3f} s", True,
-                                     (255, 255, 255))
+        time_text = self.font.render(
+            f"Time: {self.sim_time:.3f} s", True, (255, 255, 255)
+        )
         self.screen.blit(time_text, (10, 10))
 
         pygame.display.flip()
@@ -263,8 +307,11 @@ class SPHDrawer:
         mass = self.particles.mass[i]
         alpha = self.particles.alpha[i]
         vel = self.particles.velocity[i]
-        cnt = self.particles.neighbor_counts[i] if hasattr(
-            self.particles, 'neighbor_counts') else 0
+        cnt = (
+            self.particles.neighbor_counts[i]
+            if hasattr(self.particles, "neighbor_counts")
+            else 0
+        )
 
         vf = self.particles.viscosity_forces[i]
         ef = self.particles.external_forces[i]
@@ -316,8 +363,11 @@ class SPHDrawer:
                 file_path = filedialog.asksaveasfilename(
                     title="Save Snapshot",
                     defaultextension=".parquet",
-                    filetypes=[("Parquet files", "*.parquet"),
-                               ("All files", "*.*")])
+                    filetypes=[
+                        ("Parquet files", "*.parquet"),
+                        ("All files", "*.*"),
+                    ],
+                )
                 root.destroy()
                 if file_path:
                     export_snapshot(self.particles, file_path, self.sim_time)
@@ -347,12 +397,14 @@ class SPHDrawer:
 
         self.highlighted_index = clicked_index
         self.selected_particle_pos = self.particles.position[clicked_index]
-        if (hasattr(self.particles, 'neighbor_indices')
-                and hasattr(self.particles, 'neighbor_starts')
-                and hasattr(self.particles, 'neighbor_counts')):
+        if (
+            hasattr(self.particles, "neighbor_indices")
+            and hasattr(self.particles, "neighbor_starts")
+            and hasattr(self.particles, "neighbor_counts")
+        ):
             start = self.particles.neighbor_starts[clicked_index]
             cnt = self.particles.neighbor_counts[clicked_index]
-            neighbors = self.particles.neighbor_indices[start:start + cnt]
+            neighbors = self.particles.neighbor_indices[start : start + cnt]
             self.highlighted_neighbors = set(neighbors.tolist())
         else:
             self.highlighted_neighbors = set()
@@ -366,8 +418,11 @@ class SPHDrawer:
         print(f"  Alpha: {self.particles.alpha[clicked_index]:.3f}")
         vel = self.particles.velocity[clicked_index]
         print(f"  Velocity: ({vel[0]:.3f}, {vel[1]:.3f})")
-        cnt = self.particles.neighbor_counts[clicked_index] if hasattr(
-            self.particles, 'neighbor_counts') else 0
+        cnt = (
+            self.particles.neighbor_counts[clicked_index]
+            if hasattr(self.particles, "neighbor_counts")
+            else 0
+        )
         print(f"  Neighbors: {cnt}")
         # Also print forces immediately upon click.
         vf = self.particles.viscosity_forces[clicked_index]
@@ -391,9 +446,9 @@ class SPHDrawer:
             self.imported_simulation_loop()
             return
         # Launch the simulation update thread.
-        sim_thread = threading.Thread(target=self.simulation_loop,
-                                      args=(update_func, ),
-                                      daemon=True)
+        sim_thread = threading.Thread(
+            target=self.simulation_loop, args=(update_func,), daemon=True
+        )
         sim_thread.start()
 
         while self.running:

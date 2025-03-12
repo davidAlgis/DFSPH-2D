@@ -1,6 +1,6 @@
-import pytest
 import numpy as np
-from dfsph.kernels import w, grad_w
+import pytest
+from dfsph.kernels import grad_w, w
 
 # We choose constants for the 2D cubic spline kernel as often found in literature.
 # Here we use the form:
@@ -33,8 +33,9 @@ def test_kernel_normalization():
     integral *= dx * dx
     expected = 1.0
     # Allow a tolerance of 0.1 for numerical integration
-    assert abs(integral - expected) < 0.1, \
-        f"Normalization condition failed: Integral = {integral}, expected {expected}"
+    assert (
+        abs(integral - expected) < 0.1
+    ), f"Normalization condition failed: Integral = {integral}, expected {expected}"
 
 
 def test_kernel_positivity():
@@ -56,8 +57,8 @@ def test_kernel_symmetry():
     """
     h = 1.0
     for _ in range(100):
-        xI = np.random.uniform(-h/2, h/2, 2)
-        xJ = np.random.uniform(-h/2, h/2, 2)
+        xI = np.random.uniform(-h / 2, h / 2, 2)
+        xJ = np.random.uniform(-h / 2, h / 2, 2)
         w1 = w(xI, xJ, h)
         w2 = w(xJ, xI, h)
         assert abs(w1 - w2) < 1e-5, f"Kernel symmetry failed: {w1} != {w2}"
@@ -97,7 +98,9 @@ def test_kernel_gradient_analytical_vs_numerical():
             grad_numerical[i] = (w_pos - w_neg) / (2 * epsilon)
 
         diff = np.linalg.norm(grad_analytical - grad_numerical)
-        assert diff < 1e-1, f"Kernel gradient mismatch: Analytical={grad_analytical}, Numerical={grad_numerical}, diff={diff}"
+        assert (
+            diff < 1e-1
+        ), f"Kernel gradient mismatch: Analytical={grad_analytical}, Numerical={grad_numerical}, diff={diff}"
 
 
 if __name__ == "__main__":

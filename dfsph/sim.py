@@ -1,12 +1,12 @@
-import numpy as np
-from dfsph.grid import Grid
-from dfsph.particles import Particles
-from dfsph.kernels import w, grad_w
-from dfsph.init_helper import DFSPHInitConfig
-import dfsph.sph_accelerated as sphjit
 import dfsph.dfsph_pressure_solvers as dfsph_pressure_solvers
 import dfsph.particles_loader as exporter
+import dfsph.sph_accelerated as sphjit
+import numpy as np
 from dfsph.box import Box
+from dfsph.grid import Grid
+from dfsph.init_helper import DFSPHInitConfig
+from dfsph.kernels import grad_w, w
+from dfsph.particles import Particles
 
 # Constants for force types
 PRESSURE = 0
@@ -37,7 +37,9 @@ class DFSPHSim:
             print(
                 f"[Export] Data will be saved to '{self.export_path}' every 0.033 sec."
             )
-        self.grid = Grid(config.grid_origin, config.grid_size, config.cell_size)
+        self.grid = Grid(
+            config.grid_origin, config.grid_size, config.cell_size
+        )
         self.gravity = np.array([0, -9.81], dtype=np.float64)
 
         # Initial neighbor search and density/alpha computation using the box.
@@ -74,10 +76,12 @@ class DFSPHSim:
         else:
             for i in range(self.num_particles):
                 if box.is_inside(
-                    self.particles.position[i, 0], self.particles.position[i, 1]
+                    self.particles.position[i, 0],
+                    self.particles.position[i, 1],
                 ):
                     self.particles.pressure[i] = B * (
-                        (self.particles.density[i] / self.rest_density) ** gamma
+                        (self.particles.density[i] / self.rest_density)
+                        ** gamma
                         - 1
                     )
 

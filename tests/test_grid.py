@@ -7,7 +7,7 @@ from dfsph.particles import Particles
 def test_compute_cell_index():
     """
     Test the _compute_cell_index method of the Grid class.
-    
+
     This test verifies that given a position, the correct cell index is computed
     based on the grid origin and cell size.
     """
@@ -31,7 +31,7 @@ def test_compute_cell_index():
 def test_insert_particles():
     """
     Test that particles are correctly inserted into the grid cells.
-    
+
     This function adds particles at specific positions and checks that they are
     stored in the expected cells in the grid.
     """
@@ -59,7 +59,7 @@ def test_insert_particles():
 def test_find_neighbors():
     """
     Test the neighbor search functionality of the Grid class.
-    
+
     This function adds three particles, with two close enough to be neighbors
     and one far away, and verifies that neighbor relationships are correctly detected.
     """
@@ -94,7 +94,7 @@ def test_find_neighbors():
 def test_grid_end():
     """
     Test that the grid_end attribute is correctly computed.
-    
+
     The grid_end should equal grid_origin plus grid_size.
     """
     grid_origin = (10, 10)
@@ -109,7 +109,7 @@ def test_grid_end():
 def test_many_particles():
     """
     Test the grid insertion and neighbor search with many particles.
-    
+
     This test adds a larger number of particles with random positions within the grid bounds,
     performs insertion and neighbor search, and then checks that every neighbor pair is within
     the specified search radius.
@@ -125,9 +125,11 @@ def test_many_particles():
     particles = Particles(num_particles=0)
 
     # Generate random positions within the grid bounds.
-    positions = np.random.uniform(low=grid_origin[0],
-                                  high=grid_origin[0] + grid_size[0],
-                                  size=(num_particles, 2))
+    positions = np.random.uniform(
+        low=grid_origin[0],
+        high=grid_origin[0] + grid_size[0],
+        size=(num_particles, 2),
+    )
 
     # Add particles to the system.
     for pos in positions:
@@ -145,4 +147,6 @@ def test_many_particles():
         for j in particles.neighbors[i]:
             pos_j = particles.position[j]
             dist = np.linalg.norm(pos_i - pos_j)
-            assert dist < search_radius, f"Neighbor distance {dist:.2f} >= search radius for particles {i} and {j}"
+            assert (
+                dist < search_radius
+            ), f"Neighbor distance {dist:.2f} >= search radius for particles {i} and {j}"

@@ -1,9 +1,10 @@
-import numpy as np
-import pandas as pd
-import pyarrow.parquet as pq
-import pyarrow as pa
 import os
 from concurrent.futures import ThreadPoolExecutor
+
+import numpy as np
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 # Global cache for simulation times and persistent writer.
 _simulation_times_cache = None
@@ -34,12 +35,12 @@ def init_export(export_path):
 def export_snapshot(particles, export_path, sim_time):
     """
     Append a snapshot of the simulation's particle data to a single Parquet file.
-    
+
     Parameters:
       - particles: The Particles object.
       - export_path: The file name (without folder) to store snapshots.
       - sim_time: The current simulation time.
-    
+
     This function uses a persistent ParquetWriter.
     """
     global _parquet_writer, _export_file_path
@@ -64,16 +65,16 @@ def export_snapshot(particles, export_path, sim_time):
         "density": particles.density,
         "mass": particles.mass,
         "alpha": particles.alpha,
-        "type": particles.types
+        "type": particles.types,
     }
     df = pd.DataFrame(data)
     table = pa.Table.from_pandas(df)
 
     # Create a ParquetWriter if needed.
     if _parquet_writer is None:
-        _parquet_writer = pq.ParquetWriter(file_path,
-                                           table.schema,
-                                           compression="snappy")
+        _parquet_writer = pq.ParquetWriter(
+            file_path, table.schema, compression="snappy"
+        )
     _parquet_writer.write_table(table)
 
 
@@ -112,18 +113,21 @@ def _find_closest_time(available_times, target_time):
     else:
         before = available_times[idx - 1]
         after = available_times[idx]
-        return before if abs(before -
-                             target_time) < abs(after - target_time) else after
+        return (
+            before
+            if abs(before - target_time) < abs(after - target_time)
+            else after
+        )
 
 
 def import_snapshot(export_path, sim_time):
     """
     Efficiently imports a snapshot of particles from a single Parquet file at the closest sim_time.
-    
+
     Parameters:
       - export_path (str): The file name (without folder) for the Parquet snapshots.
       - sim_time (float): The target simulation time. The function picks the closest available time.
-    
+
     Returns:
       - particles (Particles): A Particles object reconstructed at the closest sim_time.
     """
@@ -141,8 +145,9 @@ def import_snapshot(export_path, sim_time):
     closest_time = _find_closest_time(available_times, sim_time)
 
     # Step 2: Read only the required rows.
-    table = pq.read_table(file_path,
-                          filters=[("sim_time", "==", closest_time)])
+    table = pq.read_table(
+        file_path, filters=[("sim_time", "==", closest_time)]
+    )
     df = table.to_pandas()
     if df.empty:
         raise ValueError(f"No data found for sim_time = {closest_time:.3f}")
@@ -166,7 +171,9 @@ def import_snapshot(export_path, sim_time):
     types = types[sorted_indices]
 
     # Step 5: Construct the Particles object.
-    from dfsph.particles import Particles  # Import here to avoid circular imports
+    from dfsph.particles import \
+        Particles  # Import here to avoid circular imports
+
     num_particles = len(indices)
     particles = Particles(num_particles)
     particles.position = positions

@@ -14,7 +14,7 @@ def m4_numba(xI, xJ, h):
     if q > 1:
         return 0.0
     elif q > 0.5:
-        return A * (2 * (1 - q)**3)
+        return A * (2 * (1 - q) ** 3)
     else:
         return A * (6 * (q**3 - q**2) + 1)
 
@@ -37,7 +37,7 @@ def grad_m4_numba(xI, xJ, h):
     if q > 1:
         dW_dq = 0.0
     elif q > 0.5:
-        dW_dq = -6.0 * A * (1 - q)**2
+        dW_dq = -6.0 * A * (1 - q) ** 2
     else:
         dW_dq = A * (18.0 * q**2 - 12.0 * q)
 

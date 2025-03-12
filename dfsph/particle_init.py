@@ -2,12 +2,13 @@ import numpy as np
 from dfsph.particles import Particles
 
 
-def particles_init(grid_origin, grid_size, h, rest_density, spacing,
-                   box_origin, box_size):
+def particles_init(
+    grid_origin, grid_size, h, rest_density, spacing, box_origin, box_size
+):
     """
     Compute the particle layout based on the simulation domain and initialize them inside a staggered box.
     Additionally, adds solid static boundary particles along the edges of the simulation domain.
-    
+
     :param grid_origin: (x, y) coordinates of the simulation domain's lower-left corner.
     :param grid_size: Tuple (grid_width, grid_height) defining the physical simulation area.
     :param h: Smoothing length.
@@ -30,26 +31,36 @@ def particles_init(grid_origin, grid_size, h, rest_density, spacing,
     particles = Particles(num_particles=0)
 
     # Add fluid particles in a staggered grid pattern.
-    particles = staggered_init(particles, num_particles_x, num_particles_y,
-                               mass, h, spacing, box_origin)
+    particles = staggered_init(
+        particles,
+        num_particles_x,
+        num_particles_y,
+        mass,
+        h,
+        spacing,
+        box_origin,
+    )
 
     # Add boundary particles (solid static) along the simulation domain boundary.
-    particles = add_boundary_particles(particles, grid_origin, grid_size,
-                                       spacing, mass, h)
+    particles = add_boundary_particles(
+        particles, grid_origin, grid_size, spacing, mass, h
+    )
 
     return particles
 
 
-def staggered_init(particles,
-                   num_particles_x,
-                   num_particles_y,
-                   mass,
-                   h,
-                   spacing=1.0,
-                   box_origin=(0.0, 0.0)):
+def staggered_init(
+    particles,
+    num_particles_x,
+    num_particles_y,
+    mass,
+    h,
+    spacing=1.0,
+    box_origin=(0.0, 0.0),
+):
     """
     Initialize fluid particles in a staggered grid pattern within a rectangular box.
-    
+
     :param particles: Particles instance to add fluid particles to.
     :param num_particles_x: Number of fluid particles along the x-axis.
     :param num_particles_y: Number of fluid particles along the y-axis.
@@ -63,22 +74,22 @@ def staggered_init(particles,
         for j in range(num_particles_y):
             # Create a staggered pattern by shifting every other row.
             x_offset = (j % 2) * (spacing / 2)
-            position = (box_origin[0] + i * spacing + x_offset,
-                        box_origin[1] + j * spacing)
+            position = (
+                box_origin[0] + i * spacing + x_offset,
+                box_origin[1] + j * spacing,
+            )
             velocity = (0.0, 0.0)
             # Fluid particles are marked as "fluid" (particle_type 0).
-            particles.add_particle(position,
-                                   velocity,
-                                   mass,
-                                   alpha=0.0,
-                                   particle_type=0)
+            particles.add_particle(
+                position, velocity, mass, alpha=0.0, particle_type=0
+            )
     return particles
 
 
 def add_boundary_particles(particles, box_origin, box_size, spacing, mass, h):
     """
     Add solid static boundary particles uniformly along the edges of the simulation domain.
-    
+
     :param particles: Particles instance to add boundary particles to.
     :param box_origin: (x, y) coordinates of the simulation domain's lower-left corner.
     :param box_size: (width, height) of the simulation domain.
@@ -101,31 +112,27 @@ def add_boundary_particles(particles, box_origin, box_size, spacing, mass, h):
     x_positions = np.arange(x0, x1 + spacing, spacing)
     for x in x_positions:
         pos = (x, y0)
-        particles.add_particle(pos, (0.0, 0.0),
-                               mass,
-                               alpha=0.0,
-                               particle_type=1)
+        particles.add_particle(
+            pos, (0.0, 0.0), mass, alpha=0.0, particle_type=1
+        )
     # Top boundary.
     for x in x_positions:
         pos = (x, y1)
-        particles.add_particle(pos, (0.0, 0.0),
-                               mass,
-                               alpha=0.0,
-                               particle_type=1)
+        particles.add_particle(
+            pos, (0.0, 0.0), mass, alpha=0.0, particle_type=1
+        )
     # Left boundary (excluding corners already added).
     y_positions = np.arange(y0 + spacing, y1, spacing)
     for y in y_positions:
         pos = (x0, y)
-        particles.add_particle(pos, (0.0, 0.0),
-                               mass,
-                               alpha=0.0,
-                               particle_type=1)
+        particles.add_particle(
+            pos, (0.0, 0.0), mass, alpha=0.0, particle_type=1
+        )
     # Right boundary.
     for y in y_positions:
         pos = (x1, y)
-        particles.add_particle(pos, (0.0, 0.0),
-                               mass,
-                               alpha=0.0,
-                               particle_type=1)
+        particles.add_particle(
+            pos, (0.0, 0.0), mass, alpha=0.0, particle_type=1
+        )
 
     return particles
