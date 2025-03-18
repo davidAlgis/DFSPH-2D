@@ -1,3 +1,4 @@
+import numpy as np
 from numba import float32, int32, njit
 from numba.experimental import jitclass
 
@@ -12,8 +13,17 @@ box_spec = [
 
 def box_repr(box):
     return (
-        f"Box(origin_x={box.origin_x}, origin_y={box.origin_y}, "
+        f"Box(origin_x={box.origin_x}, origin_y={box.origin_y},"
         f"size_x={box.size_x}, size_y={box.size_y})"
+    )
+
+
+# External function that takes a Box instance and returns the end coordinate as
+# a numpy array
+def get_box_end(box):
+    return np.array(
+        [box.origin_x + box.size_x, box.origin_y + box.size_y],
+        dtype=np.float32,
     )
 
 
