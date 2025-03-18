@@ -3,7 +3,7 @@ from dfsph.kernels import grad_w, w
 from numba import njit, prange
 
 
-@njit(parallel=True)
+@njit(parallel=True, cache=True)
 def compute_density_alpha_numba(
     positions,
     masses,
@@ -50,7 +50,7 @@ def compute_density_alpha_numba(
     return densities, alphas
 
 
-@njit(parallel=True)
+@njit(parallel=True, cache=True)
 def compute_viscosity_forces_updated_numba(
     positions,
     velocities,
@@ -106,7 +106,7 @@ def compute_viscosity_forces_updated_numba(
     return viscosity_forces
 
 
-@njit(parallel=True)
+@njit(parallel=True, cache=True)
 def update_mass_solid_numba(
     positions,
     is_solid,
@@ -139,7 +139,7 @@ def update_mass_solid_numba(
     return masses_out
 
 
-@njit(parallel=True)
+@njit(parallel=True, cache=True)
 def compute_pressure_forces_updated_numba(
     positions,
     is_solid,
@@ -184,7 +184,7 @@ def compute_pressure_forces_updated_numba(
     return pressure_forces
 
 
-@njit(parallel=True)
+@njit(parallel=True, cache=True)
 def compute_surface_tension_forces_updated_numba(
     positions,
     velocities,
