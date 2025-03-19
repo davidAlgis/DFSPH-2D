@@ -22,17 +22,23 @@ def compute_intermediate_density_numba(
 ):
     n = density.shape[0]
     for i in prange(n):
+        # Skip disabled particles
+        if types[i] == -1:
+            continue
         if not box.is_inside(
             position[i, 0], position[i, 1]
         ) or box_not.is_inside(position[i, 0], position[i, 1]):
             continue
         if types[i] != 0:
-            continue  # Only fluid particles
+            continue  # Only fluid particles are processed
         sum_component = 0.0
         for idx in range(
             neighbor_starts[i], neighbor_starts[i] + neighbor_counts[i]
         ):
             j = neighbor_indices[idx]
+            # Skip disabled neighbors
+            if types[j] == -1:
+                continue
             grad = grad_w(position[i], position[j], h)
             vij0 = velocity[i, 0] - velocity[j, 0]
             vij1 = velocity[i, 1] - velocity[j, 1]
@@ -63,6 +69,9 @@ def adapt_velocity_density_numba(
     n = velocity.shape[0]
     dt2 = dt * dt
     for i in prange(n):
+        # Skip disabled particles
+        if types[i] == -1:
+            continue
         if not box.is_inside(
             position[i, 0], position[i, 1]
         ) or box_not.is_inside(position[i, 0], position[i, 1]):
@@ -79,6 +88,9 @@ def adapt_velocity_density_numba(
             neighbor_starts[i], neighbor_starts[i] + neighbor_counts[i]
         ):
             j = neighbor_indices[idx]
+            # Skip disabled neighbors
+            if types[j] == -1:
+                continue
             gradwij = grad_w(position[i], position[j], h)
             if types[j] == 0:
                 p_j = (density_intermediate[j] - rest_density) * alpha[j] / dt2
@@ -113,6 +125,9 @@ def compute_density_derivative_numba(
 ):
     n = density.shape[0]
     for i in prange(n):
+        # Skip disabled particles
+        if types[i] == -1:
+            continue
         if not box.is_inside(
             position[i, 0], position[i, 1]
         ) or box_not.is_inside(position[i, 0], position[i, 1]):
@@ -124,6 +139,9 @@ def compute_density_derivative_numba(
             neighbor_starts[i], neighbor_starts[i] + neighbor_counts[i]
         ):
             j = neighbor_indices[idx]
+            # Skip disabled neighbors
+            if types[j] == -1:
+                continue
             gradwij = grad_w(position[i], position[j], h)
             vij0 = velocity[i, 0] - velocity[j, 0]
             vij1 = velocity[i, 1] - velocity[j, 1]
@@ -152,6 +170,9 @@ def adapt_velocity_divergence_free_numba(
 ):
     n = position.shape[0]
     for i in prange(n):
+        # Skip disabled particles
+        if types[i] == -1:
+            continue
         if not box.is_inside(
             position[i, 0], position[i, 1]
         ) or box_not.is_inside(position[i, 0], position[i, 1]):
@@ -169,6 +190,9 @@ def adapt_velocity_divergence_free_numba(
             neighbor_starts[i], neighbor_starts[i] + neighbor_counts[i]
         ):
             j = neighbor_indices[idx]
+            # Skip disabled neighbors
+            if types[j] == -1:
+                continue
             gradwij = grad_w(position[i], position[j], h)
             if types[j] == 0:
                 kappaJ = density_derivative[j] * alpha[j] / dt

@@ -7,6 +7,7 @@ from numba import njit, prange
 def compute_density_alpha_numba(
     positions,
     masses,
+    types,
     neighbor_indices,
     neighbor_starts,
     neighbor_counts,
@@ -21,6 +22,12 @@ def compute_density_alpha_numba(
     min_density = rest_density / 100.0
 
     for i in prange(n):
+        # Skip disabled particles
+        if types[i] == -1:
+            densities[i] = 0.0
+            alphas[i] = 0.0
+            continue
+
         if not box.is_inside(
             positions[i, 0], positions[i, 1]
         ) or box_not.is_inside(positions[i, 0], positions[i, 1]):
@@ -37,6 +44,9 @@ def compute_density_alpha_numba(
         count = neighbor_counts[i]
         for k in range(count):
             j = neighbor_indices[start + k]
+            # Skip contribution from disabled neighbors
+            if types[j] == -1:
+                continue
             wij = w(positions[i], positions[j], h)
             grad_wij = grad_w(positions[i], positions[j], h)
             density_fluid += masses[j] * wij
@@ -54,6 +64,7 @@ def compute_density_alpha_numba(
 def compute_viscosity_forces_updated_numba(
     positions,
     velocities,
+    types,
     is_solid,
     densities,
     masses,
@@ -69,6 +80,8 @@ def compute_viscosity_forces_updated_numba(
     n = positions.shape[0]
     viscosity_forces = np.zeros((n, 2), dtype=np.float64)
     for i in prange(n):
+        if types[i] == -1:
+            continue
         if not box.is_inside(
             positions[i, 0], positions[i, 1]
         ) or box_not.is_inside(positions[i, 0], positions[i, 1]):
@@ -83,6 +96,8 @@ def compute_viscosity_forces_updated_numba(
         count = neighbor_counts[i]
         for k in range(count):
             j = neighbor_indices[start + k]
+            if types[j] == -1:
+                continue
             r_ij = positions[i] - positions[j]
             r2 = r_ij[0] * r_ij[0] + r_ij[1] * r_ij[1] + 1e-5
             v_ij = vel_i - velocities[j]
@@ -109,6 +124,7 @@ def compute_viscosity_forces_updated_numba(
 @njit(parallel=True, cache=True)
 def update_mass_solid_numba(
     positions,
+    types,
     is_solid,
     neighbor_indices,
     neighbor_starts,
@@ -122,6 +138,8 @@ def update_mass_solid_numba(
 ):
     n = positions.shape[0]
     for i in prange(n):
+        if types[i] == -1:
+            continue
         if not box.is_inside(
             positions[i, 0], positions[i, 1]
         ) or box_not.is_inside(positions[i, 0], positions[i, 1]):
@@ -132,6 +150,8 @@ def update_mass_solid_numba(
             sum_w_val = 0.0
             for k in range(count):
                 j = neighbor_indices[start + k]
+                if types[j] == -1:
+                    continue
                 if is_solid[j] == 1:
                     sum_w_val += w(positions[i], positions[j], h)
             if sum_w_val > 1e-8:
@@ -142,6 +162,7 @@ def update_mass_solid_numba(
 @njit(parallel=True, cache=True)
 def compute_pressure_forces_updated_numba(
     positions,
+    types,
     is_solid,
     densities,
     pressures,
@@ -156,6 +177,8 @@ def compute_pressure_forces_updated_numba(
     n = positions.shape[0]
     pressure_forces = np.zeros((n, 2), dtype=np.float64)
     for i in prange(n):
+        if types[i] == -1:
+            continue
         if not box.is_inside(
             positions[i, 0], positions[i, 1]
         ) or box_not.is_inside(positions[i, 0], positions[i, 1]):
@@ -171,6 +194,8 @@ def compute_pressure_forces_updated_numba(
         accum = np.zeros(2, dtype=np.float64)
         for k in range(count):
             j = neighbor_indices[start + k]
+            if types[j] == -1:
+                continue
             grad_ij = grad_w(positions[i], positions[j], h)
             if is_solid[j] == 0:
                 accum -= (
@@ -187,6 +212,7 @@ def compute_pressure_forces_updated_numba(
 @njit(parallel=True, cache=True)
 def compute_surface_tension_forces_updated_numba(
     positions,
+    types,
     velocities,
     is_solid,
     densities,
@@ -202,6 +228,8 @@ def compute_surface_tension_forces_updated_numba(
     n = positions.shape[0]
     surf_forces = np.zeros((n, 2), dtype=np.float64)
     for i in prange(n):
+        if types[i] == -1:
+            continue
         if not box.is_inside(
             positions[i, 0], positions[i, 1]
         ) or box_not.is_inside(positions[i, 0], positions[i, 1]):
@@ -213,6 +241,8 @@ def compute_surface_tension_forces_updated_numba(
         count = neighbor_counts[i]
         for k in range(count):
             j = neighbor_indices[start + k]
+            if types[j] == -1:
+                continue
             if is_solid[j] == 0:
                 grad_ij = grad_w(positions[i], positions[j], h)
                 accum -= (
