@@ -28,7 +28,8 @@ class SPHDrawer:
     ):
         """
         Initialize the Pygame visualization for SPH particles.
-        If `import_path` is set, particles will be loaded from a binary file instead of a live simulation.
+        If `import_path` is set, particles will be loaded from a binary file
+        instead of a live simulation.
         """
         pygame.init()
         self.import_path = import_path  # File path for loading snapshots
@@ -67,9 +68,16 @@ class SPHDrawer:
         self.running = False
         self.clock = pygame.time.Clock()
 
+        # Define assets directory relative to this file.
+        assets_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
         # Create UI drawer.
         self.ui = UIDrawer(
-            self.screen, self.width, self.height, button_size=30, padding=5
+            assets_dir,
+            self.screen,
+            self.width,
+            self.height,
+            button_size=30,
+            padding=5,
         )
         # We'll use self.ui.active_button to highlight the current state.
         self.ui.active_button = None
@@ -146,7 +154,8 @@ class SPHDrawer:
             2,
         )
 
-        # Draw the extra origin lines in white, if the origin is within the grid.
+        # Draw the extra origin lines in white, if the origin is within the
+        # grid.
         # Vertical line for x = 0.
         if (
             self.grid_origin[0]

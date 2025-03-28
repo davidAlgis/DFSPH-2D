@@ -7,7 +7,13 @@ import pygame
 class UIDrawer:
 
     def __init__(
-        self, screen, window_width, window_height, button_size=30, padding=5
+        self,
+        assets_dir,
+        screen,
+        window_width,
+        window_height,
+        button_size=30,
+        padding=5,
     ):
         """
         Initialize the UI drawer responsible for drawing control buttons.
@@ -24,8 +30,6 @@ class UIDrawer:
         self.button_size = button_size
         self.padding = padding
 
-        # Define assets directory relative to this file.
-        assets_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
         # Load button background and icon images.
         self.button_bg = pygame.image.load(
             os.path.join(assets_dir, "button_square_depth_gradient.png")
@@ -67,7 +71,8 @@ class UIDrawer:
             (button_size - icon_size) // 2,
         )
 
-        # Define button rectangles arranged horizontally in the top-right corner.
+        # Define button rectangles arranged horizontally in the top-right
+        # corner.
         total_width = 4 * button_size + 5 * padding  # 4 buttons
         x0 = window_width - total_width
         y0 = padding
@@ -87,8 +92,9 @@ class UIDrawer:
 
     def draw_buttons(self, a):
         """
-        Draws the control buttons with the button background and centered icons.
-        If a button is active, draws a yellow border around it.
+        Draws the control buttons with the button background and centered
+        icons. If a button is active, draws a yellow border around it.
+
         """
         # Draw Play button.
         self.screen.blit(self.button_bg, self.play_button.topleft)
@@ -135,7 +141,8 @@ class UIDrawer:
         Checks if the mouse click is on one of the control buttons.
 
         :param mouse_pos: (x, y) tuple from the mouse event.
-        :return: "play", "pause", "step", "save", or None if no button was clicked.
+        :return: "play", "pause", "step", "save", or None if no button was
+        clicked.
         """
         if self.play_button.collidepoint(mouse_pos):
             return "play"
