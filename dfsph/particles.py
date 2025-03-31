@@ -5,8 +5,9 @@ class Particles:
 
     def __init__(self, num_particles: int = 0):
         """
-        A class representing a collection of particles for a 2D Smoothed Particle Hydrodynamics (SPH) simulation.
-        Uses a Structure of Arrays (SoA) layout for optimized computation.
+        A class representing a collection of particles for a 2D Smoothed
+        Particle Hydrodynamics (SPH) simulation. Uses a Structure of Arrays
+        (SoA) layout for optimized computation.
         """
         self.num_particles = num_particles
 
@@ -110,9 +111,10 @@ class Particles:
 
     def update_neighbors(self, neighbors_list):
         """
-        Converts a list-of-lists neighbor structure into an efficient SoA format.
-
-        :param neighbors_list: List of neighbor indices per particle (list of lists).
+        Converts a list-of-lists neighbor structure into an efficient SoA
+format.
+        :param neighbors_list: List of neighbor indices per particle (list of
+        lists).
         """
         total_neighbors = sum(len(neigh) for neigh in neighbors_list)
         self.neighbor_indices = np.zeros(total_neighbors, dtype=np.int32)
@@ -124,6 +126,44 @@ class Particles:
             self.neighbor_counts[i] = len(neigh)
             self.neighbor_indices[idx : idx + len(neigh)] = neigh
             idx += len(neigh)
+
+    def remove_type(self, type_to_remove: int):
+        """
+        Removes all particles of the specified type from the system.
+
+        This method filters out all particles whose `types` attribute matches
+        the given `type_to_remove`. All associated particle properties are
+        updated. Note: This resets the neighbor information, so
+        update_neighbors should be called afterwards if neighbor data is
+needed.
+        :param type_to_remove: Particle type to remove.
+        
+        """
+        # Create a mask for particles to keep
+        mask = self.types != type_to_remove
+
+        # Update particle count
+        self.num_particles = np.count_nonzero(mask)
+
+        # Update all particle properties using the mask
+        self.position = self.position[mask]
+        self.velocity = self.velocity[mask]
+        self.viscosity_forces = self.viscosity_forces[mask]
+        self.external_forces = self.external_forces[mask]
+        self.pressure_forces = self.pressure_forces[mask]
+        self.surface_tension_forces = self.surface_tension_forces[mask]
+        self.mass = self.mass[mask]
+        self.density = self.density[mask]
+        self.density_intermediate = self.density_intermediate[mask]
+        self.density_derivative = self.density_derivative[mask]
+        self.alpha = self.alpha[mask]
+        self.pressure = self.pressure[mask]
+        self.types = self.types[mask]
+
+        # Reset neighbor data (since indices may no longer be valid)
+        self.neighbor_indices = np.zeros(0, dtype=np.int32)
+        self.neighbor_counts = np.zeros(self.num_particles, dtype=np.int32)
+        self.neighbor_starts = np.zeros(self.num_particles, dtype=np.int32)
 
     def __repr__(self):
         return f"Particles(num={self.num_particles})"
