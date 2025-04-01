@@ -51,28 +51,28 @@ def main():
         "--box_origin",
         type=float,
         nargs=2,
-        default=[-1.4, -0.8],
+        default=[-1.3, -1.8],
         help="Origin of the box for particle initialization (default: 0.5 0.5)",
     )
     parser.add_argument(
         "--box_size",
         type=float,
         nargs=2,
-        default=[2.5, 2.5],
+        default=[2.5, 3.2],
         help="Size of the box for particle initialization (default: 2 2)",
     )
     parser.add_argument(
         "--grid_origin",
         type=float,
         nargs=2,
-        default=[-1.5, -1],
+        default=[-1.5, -2],
         help="Position of the grid in simulation space (default: 0.0 0.0)",
     )
     parser.add_argument(
         "--grid_size",
         type=int,
         nargs=2,
-        default=[3, 3],
+        default=[3, 4],
         help="Grid dimensions as (width, height) (default: 4 4)",
     )
 
@@ -136,7 +136,7 @@ def main():
 
     if args.import_results:
         print(
-            f"Loading {num_particles} particles from file: "
+            f"Loading {num_particles} particles from file:"
             f"{args.import_results}"
         )
         if args.visualize:
@@ -179,7 +179,7 @@ def main():
             drawer.run(update_sim)
         else:
             print(
-                f"Starting simulation without visualization with "
+                f"Starting simulation without visualization with"
                 f"{num_particles} particles..."
             )
             for i in range(args.steps):
