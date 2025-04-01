@@ -3,7 +3,7 @@ from dfsph.kernels import grad_w
 from numba import njit, prange
 
 
-@njit(parallel=True, cache=True)
+@njit(parallel=True)
 def compute_intermediate_density_numba(
     density,
     position,
@@ -48,7 +48,7 @@ def compute_intermediate_density_numba(
         density_intermediate[i] = max(rest_density, density_intermediate_i)
 
 
-@njit(parallel=True, cache=True)
+@njit(parallel=True)
 def adapt_velocity_density_numba(
     position,
     velocity,
@@ -106,7 +106,7 @@ def adapt_velocity_density_numba(
         velocity[i, 1] -= dt * vel_corr1
 
 
-@njit(parallel=True, cache=True)
+@njit(parallel=True)
 def compute_density_derivative_numba(
     density,
     position,
@@ -150,7 +150,7 @@ def compute_density_derivative_numba(
     return density_derivative
 
 
-@njit(parallel=True, cache=True)
+@njit(parallel=True)
 def adapt_velocity_divergence_free_numba(
     position,
     velocity,
