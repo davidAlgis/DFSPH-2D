@@ -363,16 +363,30 @@ class DFSPHSim:
         )
         self.particles.velocity[disabled_indices] = old_velocity
 
+    def compute_density_error(self, box: Box, box_not: Box):
+        density_errors = 0
+        nbr_particles_compute = 0
+        for i in range(self.num_particles):
+            if self.particles.types[i] == -1:
+                continue
+            pos = self.particles.position[i]
+            if box.is_inside(pos[0], pos[1]) and not box_not.is_inside(
+                pos[0], pos[1]
+            ):
+                density_errors += np.abs(
+                    self.particles.density_intermediate[i] - self.rest_density
+                )
+                nbr_particles_compute += 1
+        avg_error = density_errors / nbr_particles_compute
+        return avg_error
+
     def solve_constant_density(self, box: Box, box_not: Box):
         max_iter = 24
         for iteration in range(max_iter):
             self.compute_intermediate_density(box, box_not)
-            fluid_mask = self.particles.types == 0
-            density_errors = np.abs(
-                self.particles.density_intermediate[fluid_mask]
-                - self.rest_density
-            )
-            avg_error = np.mean(density_errors)
+            # compute density errors on particles inside box and not inside
+            # box_not
+            avg_error = self.compute_density_error(box, box_not)
             if avg_error < 1e-3 * self.rest_density:
                 break
             self.adapt_velocity_density(box, box_not)
@@ -429,19 +443,39 @@ class DFSPHSim:
         )
         self.particles.velocity[disabled_indices] = old_velocity
 
+    def compute_divergence_error(self, box: Box, box_not: Box):
+        density_derivative_errors = 0
+        nbr_particles_compute = 0
+        for i in range(self.num_particles):
+            if self.particles.types[i] == -1:
+                continue
+            pos = self.particles.position[i]
+            if box.is_inside(pos[0], pos[1]) and not box_not.is_inside(
+                pos[0], pos[1]
+            ):
+                density_derivative_errors += np.abs(
+                    self.particles.density_derivative[i]
+                )
+                nbr_particles_compute += 1
+        density_derivative_avg = (
+            density_derivative_errors / nbr_particles_compute
+        )
+        return density_derivative_avg
+
     def solve_divergence_free(self, box: Box, box_not: Box):
         threshold_divergence = 1e-3 * self.rest_density / self.dt
         max_iter = 24
         iter_count = 0
-        fluid_mask = self.particles.types == 0
         density_derivative_avg = np.inf
         while (iter_count < max_iter) and (
             abs(density_derivative_avg) > threshold_divergence
         ):
             self.compute_density_derivative(box, box_not)
             self.adapt_velocity_divergence_free(box, box_not)
-            density_derivative_avg = np.mean(
-                np.abs(self.particles.density_derivative[fluid_mask])
+            # compute density errors on particles inside box and not inside
+            # box_not
+            density_derivative_avg = self.compute_divergence_error(
+                box, box_not
             )
             iter_count += 1
         if iter_count >= max_iter:
