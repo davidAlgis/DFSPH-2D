@@ -14,9 +14,10 @@ _export_file_path = None
 
 def init_export(export_path):
     """
-    Initialize the export binary file for storing simulation snapshots in a single Parquet file.
-    Assumes export_path is a file name without folder path.
-    If export_path is empty, nothing is done.
+    Initialize the export binary file for storing simulation snapshots in a
+    single Parquet file. Assumes export_path is a file name without folder
+    path. If export_path is empty, nothing is done.
+    
     """
     global _parquet_writer, _export_file_path
     if not export_path:
@@ -120,42 +121,35 @@ def _find_closest_time(available_times, target_time):
         )
 
 
-def import_snapshot(export_path, sim_time):
-    """
-    Efficiently imports a snapshot of particles from a single Parquet file at the closest sim_time.
-
-    Parameters:
-      - export_path (str): The file name (without folder) for the Parquet snapshots.
-      - sim_time (float): The target simulation time. The function picks the closest available time.
-
-    Returns:
-      - particles (Particles): A Particles object reconstructed at the closest sim_time.
-    """
+def import_snapshot(export_path, sim_time, tol=1e-3):
     if not export_path:
         raise ValueError("Export path is empty. Cannot import snapshots.")
 
-    # Ensure export_path ends with ".parquet"
     if not export_path.endswith(".parquet"):
         file_path = export_path + ".parquet"
     else:
         file_path = export_path
 
-    # Step 1: Get closest available time.
     available_times = _get_simulation_times(file_path)
     closest_time = _find_closest_time(available_times, sim_time)
 
-    # Step 2: Read only the required rows.
-    table = pq.read_table(
-        file_path, filters=[("sim_time", "==", closest_time)]
-    )
-    df = table.to_pandas()
+    # Instead of filtering for equality, filter for values within tol of
+    # closest_time.
+    table = pq.read_table(file_path)
+    sim_times = table["sim_time"].to_numpy()
+    mask = abs(sim_times - closest_time) < tol
+    if not mask.any():
+        raise ValueError(f"No data found for sim_time = {closest_time:.3f}")
+    filtered_table = table.filter(pa.compute.equal(mask, True))
+
+    df = filtered_table.to_pandas()
     if df.empty:
         raise ValueError(f"No data found for sim_time = {closest_time:.3f}")
 
     # Step 3: Extract particle attributes.
     indices = df["particle_index"].to_numpy(dtype=np.int32)
-    positions = df[["x", "y"]].to_numpy(dtype=np.float64)
-    velocities = df[["vx", "vy"]].to_numpy(dtype=np.float64)
+    positions = df[["x","y"]].to_numpy(dtype=np.float64)
+    velocities = df[["vx","vy"]].to_numpy(dtype=np.float64)
     density = df["density"].to_numpy(dtype=np.float64)
     mass = df["mass"].to_numpy(dtype=np.float64)
     alpha = df["alpha"].to_numpy(dtype=np.float64)
