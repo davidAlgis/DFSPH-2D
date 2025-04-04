@@ -15,16 +15,22 @@ _export_file_path = None
 def init_export(export_path):
     """
     Initialize the export binary file for storing simulation snapshots in a
-    single Parquet file. Assumes export_path is a file name without folder
-    path. If export_path is empty, nothing is done.
-    
+    single Parquet file. Assumes export_path is a file name (or full path).
+    If export_path is empty, nothing is done.
     """
     global _parquet_writer, _export_file_path
     if not export_path:
         return
+
     # Ensure the export file name ends with ".parquet"
     if not export_path.endswith(".parquet"):
         export_path += ".parquet"
+
+    # Create the directory if it doesn't exist.
+    folder = os.path.dirname(export_path)
+    if folder and not os.path.exists(folder):
+        os.makedirs(folder, exist_ok=True)
+
     # Remove the file if it already exists.
     if os.path.exists(export_path):
         os.remove(export_path)
@@ -35,23 +41,30 @@ def init_export(export_path):
 
 def export_snapshot(particles, export_path, sim_time):
     """
-    Append a snapshot of the simulation's particle data to a single Parquet file.
-
+    Append a snapshot of the simulation's particle data to a single Parquet
+file.
     Parameters:
       - particles: The Particles object.
-      - export_path: The file name (without folder) to store snapshots.
+      - export_path: The file name (or full path) to store snapshots.
       - sim_time: The current simulation time.
 
     This function uses a persistent ParquetWriter.
+    
     """
     global _parquet_writer, _export_file_path
     if not export_path:
         return
+
     # Ensure the file name ends with ".parquet"
     if not export_path.endswith(".parquet"):
         file_path = export_path + ".parquet"
     else:
         file_path = export_path
+
+    # Ensure the folder exists.
+    folder = os.path.dirname(file_path)
+    if folder and not os.path.exists(folder):
+        os.makedirs(folder, exist_ok=True)
 
     num_particles = particles.num_particles
 
@@ -146,16 +159,16 @@ def import_snapshot(export_path, sim_time, tol=1e-3):
     if df.empty:
         raise ValueError(f"No data found for sim_time = {closest_time:.3f}")
 
-    # Step 3: Extract particle attributes.
+    # Extract particle attributes.
     indices = df["particle_index"].to_numpy(dtype=np.int32)
-    positions = df[["x","y"]].to_numpy(dtype=np.float64)
-    velocities = df[["vx","vy"]].to_numpy(dtype=np.float64)
+    positions = df[["x", "y"]].to_numpy(dtype=np.float64)
+    velocities = df[["vx", "vy"]].to_numpy(dtype=np.float64)
     density = df["density"].to_numpy(dtype=np.float64)
     mass = df["mass"].to_numpy(dtype=np.float64)
     alpha = df["alpha"].to_numpy(dtype=np.float64)
     types = df["type"].to_numpy(dtype=np.int32)
 
-    # Step 4: Sort particles by index.
+    # Sort particles by index.
     sorted_indices = np.argsort(indices)
     positions = positions[sorted_indices]
     velocities = velocities[sorted_indices]
@@ -164,7 +177,7 @@ def import_snapshot(export_path, sim_time, tol=1e-3):
     alpha = alpha[sorted_indices]
     types = types[sorted_indices]
 
-    # Step 5: Construct the Particles object.
+    # Construct the Particles object.
     from dfsph.particles import \
         Particles  # Import here to avoid circular imports
 
