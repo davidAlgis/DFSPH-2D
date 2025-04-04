@@ -163,6 +163,9 @@ def main():
         sim = DFSPHSim(particles, config, export_path=args.export_results)
 
         if args.visualize:
+            print("Launching a first update...")
+            sim.update()
+            print("Launching rendering...")
             drawer = SPHDrawer(
                 num_particles=num_particles,
                 grid_origin=args.grid_origin,
