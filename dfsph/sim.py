@@ -416,6 +416,7 @@ class DFSPHSim:
             self.particles.mass,
             self.particles.types,
             self.particles.density_derivative,
+            self.particles.pressure_forces,
             self.particles.neighbor_starts,
             self.particles.neighbor_counts,
             self.particles.neighbor_indices,

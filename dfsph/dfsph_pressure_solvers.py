@@ -1,4 +1,3 @@
-import numpy as np
 from dfsph.kernels import grad_w
 from numba import njit, prange
 
@@ -97,7 +96,7 @@ def adapt_velocity_density_numba(
             if types[j] == 0:
                 p_j = (density_intermediate[j] - rest_density) * alpha[j] / dt2
                 p_j = max(0, p_j)
-                scalar = mass[i] * (p_div_rho_i + p_j / density[j])
+                scalar = mass[j] * (p_div_rho_i + p_j / density[j])
                 force_pressure_corr0 += scalar * gradwij[0]
                 force_pressure_corr1 += scalar * gradwij[1]
             # solid particles
@@ -165,6 +164,7 @@ def adapt_velocity_divergence_free_numba(
     mass,
     types,
     density_derivative,
+    pressure_forces,
     neighbor_starts,
     neighbor_counts,
     neighbor_indices,
@@ -190,8 +190,8 @@ def adapt_velocity_divergence_free_numba(
         rho_i = density[i]
         kappaI = density_derivative[i] * alpha[i] / dt
         kappaIDivRhoI = kappaI / rho_i
-        vel_corr0 = 0.0
-        vel_corr1 = 0.0
+        force_pressure_corr0 = 0.0
+        force_pressure_corr1 = 0.0
         for idx in range(
             neighbor_starts[i], neighbor_starts[i] + neighbor_counts[i]
         ):
@@ -203,12 +203,15 @@ def adapt_velocity_divergence_free_numba(
             if types[j] == 0:
                 kappaJ = density_derivative[j] * alpha[j] / dt
                 kappaJDivRhoJ = kappaJ / density[j]
-                scalar = mass[i] * (kappaIDivRhoI + kappaJDivRhoJ)
-                vel_corr0 += scalar * gradwij[0]
-                vel_corr1 += scalar * gradwij[1]
+                scalar = mass[j] * (kappaIDivRhoI + kappaJDivRhoJ)
+                force_pressure_corr0 += scalar * gradwij[0]
+                force_pressure_corr1 += scalar * gradwij[1]
             else:
                 scalar = (mass[j] / rho_i) * kappaI
-                vel_corr0 += scalar * gradwij[0]
-                vel_corr1 += scalar * gradwij[1]
-        velocity[i, 0] -= dt * vel_corr0
-        velocity[i, 1] -= dt * vel_corr1
+                force_pressure_corr0 += scalar * gradwij[0]
+                force_pressure_corr1 += scalar * gradwij[1]
+
+        pressure_forces[i, 0] = mass[i] * force_pressure_corr0
+        pressure_forces[i, 1] = mass[i] * force_pressure_corr1
+        velocity[i, 0] -= dt * force_pressure_corr0
+        velocity[i, 1] -= dt * force_pressure_corr1
