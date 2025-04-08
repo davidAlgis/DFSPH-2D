@@ -52,28 +52,29 @@ def main():
         type=float,
         nargs=2,
         default=[-1.3, -1.8],
-        help="Origin of the box for particle initialization (default: 0.5 0.5)",
+        help="Origin of the box for particle initialization (default: -1.3"
+        "-1.8)",
     )
     parser.add_argument(
         "--box_size",
         type=float,
         nargs=2,
-        default=[2.5, 3.2],
-        help="Size of the box for particle initialization (default: 2 2)",
+        default=[1, 1],
+        help="Size of the box for particle initialization (default: 1 1)",
     )
     parser.add_argument(
         "--grid_origin",
         type=float,
         nargs=2,
         default=[-1.5, -2],
-        help="Position of the grid in simulation space (default: 0.0 0.0)",
+        help="Position of the grid in simulation space (default: -1.5 -2)",
     )
     parser.add_argument(
         "--grid_size",
         type=int,
         nargs=2,
         default=[3, 4],
-        help="Grid dimensions as (width, height) (default: 4 4)",
+        help="Grid dimensions as (width, height) (default: 3 4)",
     )
 
     parser.add_argument(
@@ -103,16 +104,25 @@ def main():
         "--import_results",
         type=str,
         default="",
-        help="File name to import particle data for visualization (default: em"
-        "pty)",
+        help="File name to import particle data for visualization (default:"
+        "empty)",
     )
     parser.add_argument(
         "-ii",
         "--import_init",
         type=str,
         default="",
-        help="File name to import initial particle configuration (default: emp"
-        "ty)",
+        help="File name to import initial particle configuration (default:"
+        "empty)",
+    )
+    # New argument to export a GIF of the simulation.
+    parser.add_argument(
+        "-pg",
+        "--path_gif",
+        type=str,
+        default="",
+        help='Path to save the simulation GIF. An empty string disables GIF'
+        'saving (default: "")',
     )
 
     args = parser.parse_args()
@@ -175,11 +185,31 @@ def main():
             )
             drawer.set_particles(sim.particles)
 
+            # Check if a GIF should be created.
+            gif_drawer = None
+            if args.path_gif != "":
+                # Import the Drawer2Gif class from your script.
+                from dfsph.drawer_2_gif import Drawer2Gif
+
+                # Duration here can be tuned; we're using the timestep as a
+                # starting point.
+                gif_drawer = Drawer2Gif(
+                    filename=args.path_gif, duration=args.timestep
+                )
+                print(f"GIF recording enabled. Saving to: {args.path_gif}")
+
             def update_sim():
                 sim.update()
                 drawer.sim_time = sim.sim_time
+                # Save current frame to gif if recording is enabled.
+                if gif_drawer is not None:
+                    gif_drawer.add_screen(drawer.screen)
 
             drawer.run(update_sim)
+
+            # After quitting the simulation, close the gif writer.
+            if gif_drawer is not None:
+                gif_drawer.close()
         else:
             print(
                 f"Starting simulation without visualization with"
