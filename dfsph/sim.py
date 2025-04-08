@@ -210,7 +210,7 @@ class DFSPHSim:
 
         total_force = (
             self.particles.viscosity_forces
-            + self.particles.pressure_forces
+            # + self.particles.pressure_forces
             + self.particles.surface_tension_forces
             + self.particles.external_forces
         )
@@ -317,14 +317,10 @@ class DFSPHSim:
         self.particles.surface_tension_forces[active_mask] = 0
 
     def compute_intermediate_density(self, box: Box, box_not: Box):
-        disabled_indices = np.where(self.particles.types == -1)[0]
-        old_density_intermediate = self.particles.density_intermediate[
-            disabled_indices
-        ].copy()
         dfsph_pressure_solvers.compute_intermediate_density_numba(
             self.particles.density,
             self.particles.position,
-            self.particles.velocity,
+            self.particles.velocity_intermediate,
             self.particles.mass,
             self.particles.types,
             self.particles.density_intermediate,
@@ -336,20 +332,16 @@ class DFSPHSim:
             self.rest_density,
             box,
             box_not,
-        )
-        self.particles.density_intermediate[disabled_indices] = (
-            old_density_intermediate
         )
 
     def adapt_velocity_density(self, box: Box, box_not: Box):
-        disabled_indices = np.where(self.particles.types == -1)[0]
-        old_velocity = self.particles.velocity[disabled_indices].copy()
         dfsph_pressure_solvers.adapt_velocity_density_numba(
             self.particles.position,
-            self.particles.velocity,
+            self.particles.velocity_intermediate,
             self.particles.density,
             self.particles.alpha,
             self.particles.density_intermediate,
+            self.particles.pressure_forces,
             self.particles.mass,
             self.particles.types,
             self.particles.neighbor_starts,
@@ -361,7 +353,6 @@ class DFSPHSim:
             box,
             box_not,
         )
-        self.particles.velocity[disabled_indices] = old_velocity
 
     def compute_density_error(self, box: Box, box_not: Box):
         density_errors = 0
@@ -382,6 +373,7 @@ class DFSPHSim:
 
     def solve_constant_density(self, box: Box, box_not: Box):
         max_iter = 24
+        self.particles.velocity_intermediate = self.particles.velocity.copy()
         for iteration in range(max_iter):
             self.compute_intermediate_density(box, box_not)
             # compute density errors on particles inside box and not inside
@@ -395,6 +387,7 @@ class DFSPHSim:
                 f"[Density Solver]: Max iteration reached! avg error ="
                 f"{avg_error:.3f}"
             )
+        self.particles.velocity = self.particles.velocity_intermediate.copy()
 
     def compute_density_derivative(self, box: Box, box_not: Box):
         disabled_indices = np.where(self.particles.types == -1)[0]

@@ -55,6 +55,7 @@ def adapt_velocity_density_numba(
     density,
     alpha,
     density_intermediate,
+    pressure_forces,
     mass,
     types,
     neighbor_starts,
@@ -82,8 +83,8 @@ def adapt_velocity_density_numba(
             continue
         p_i = (density_intermediate[i] - rest_density) * alpha[i] / dt2
         p_div_rho_i = p_i / density[i]
-        vel_corr0 = 0.0
-        vel_corr1 = 0.0
+        force_pressure_corr0 = 0.0
+        force_pressure_corr1 = 0.0
         for idx in range(
             neighbor_starts[i], neighbor_starts[i] + neighbor_counts[i]
         ):
@@ -92,18 +93,23 @@ def adapt_velocity_density_numba(
             if types[j] == -1:
                 continue
             gradwij = grad_w(position[i], position[j], h)
+            # fluid particles
             if types[j] == 0:
                 p_j = (density_intermediate[j] - rest_density) * alpha[j] / dt2
                 p_j = max(0, p_j)
                 scalar = mass[i] * (p_div_rho_i + p_j / density[j])
-                vel_corr0 += scalar * gradwij[0]
-                vel_corr1 += scalar * gradwij[1]
+                force_pressure_corr0 += scalar * gradwij[0]
+                force_pressure_corr1 += scalar * gradwij[1]
+            # solid particles
             else:
                 scalar = 2.0 * mass[j] * p_div_rho_i
-                vel_corr0 += scalar * gradwij[0]
-                vel_corr1 += scalar * gradwij[1]
-        velocity[i, 0] -= dt * vel_corr0
-        velocity[i, 1] -= dt * vel_corr1
+                force_pressure_corr0 += scalar * gradwij[0]
+                force_pressure_corr1 += scalar * gradwij[1]
+
+        pressure_forces[i, 0] = mass[i] * force_pressure_corr0
+        pressure_forces[i, 1] = mass[i] * force_pressure_corr1
+        velocity[i, 0] -= dt * force_pressure_corr0
+        velocity[i, 1] -= dt * force_pressure_corr1
 
 
 @njit(parallel=True)
