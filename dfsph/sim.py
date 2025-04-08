@@ -229,8 +229,7 @@ class DFSPHSim:
                 total_force[i] / self.particles.mass[i]
             ) * self.dt
 
-    def integrate(self, box: Box, box_not: Box):
-        fluid_mask = self.particles.types == 0
+    def explosion_check(self, box: Box, box_not: Box):
         vel_max = np.array(
             [0, -0.25 * self.grid.grid_size[1]], dtype=np.float64
         )
@@ -255,10 +254,18 @@ class DFSPHSim:
                     / self.particles.mass[i]
                 )
                 self.particles.velocity[i, 1] = vel_y_grav_only
-        active_fluid_mask = self.particles.types == 0
-        self.particles.position[active_fluid_mask] += (
-            self.particles.velocity[active_fluid_mask] * self.dt
-        )
+
+    def integrate(self, box: Box, box_not: Box):
+        self.explosion_check(box, box_not)
+
+        for i in range(self.num_particles):
+            if self.particles.types[i] != 0:
+                continue
+            self.particles.velocity[i] += (
+                self.particles.pressure_forces[i] / self.particles.mass[i]
+            ) * self.dt
+
+            self.particles.position[i] += self.particles.velocity[i] * self.dt
 
     def apply_boundary_penalty(
         self, box: Box, box_not: Box, collider_damping=0.5
@@ -335,6 +342,7 @@ class DFSPHSim:
         )
 
     def adapt_velocity_density(self, box: Box, box_not: Box):
+
         dfsph_pressure_solvers.adapt_velocity_density_numba(
             self.particles.position,
             self.particles.velocity_intermediate,
@@ -374,6 +382,8 @@ class DFSPHSim:
     def solve_constant_density(self, box: Box, box_not: Box):
         max_iter = 24
         self.particles.velocity_intermediate = self.particles.velocity.copy()
+        active_mask = self.particles.types == 0
+        self.particles.pressure_forces[active_mask] = 0
         for iteration in range(max_iter):
             self.compute_intermediate_density(box, box_not)
             # compute density errors on particles inside box and not inside
@@ -387,7 +397,6 @@ class DFSPHSim:
                 f"[Density Solver]: Max iteration reached! avg error ="
                 f"{avg_error:.3f}"
             )
-        self.particles.velocity = self.particles.velocity_intermediate.copy()
 
     def compute_density_derivative(self, box: Box, box_not: Box):
         dfsph_pressure_solvers.compute_density_derivative_numba(
