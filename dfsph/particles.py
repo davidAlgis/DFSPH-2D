@@ -14,6 +14,9 @@ class Particles:
         # Initialize particle properties
         self.position = np.zeros((num_particles, 2), dtype=np.float32)
         self.velocity = np.zeros((num_particles, 2), dtype=np.float32)
+        self.velocity_intermediate = np.zeros(
+            (num_particles, 2), dtype=np.float32
+        )
 
         self.viscosity_forces = np.zeros((num_particles, 2), dtype=np.float32)
         self.external_forces = np.zeros((num_particles, 2), dtype=np.float32)
@@ -64,6 +67,9 @@ class Particles:
         # Resize arrays to accommodate new particle
         self.position = np.resize(self.position, (self.num_particles, 2))
         self.velocity = np.resize(self.velocity, (self.num_particles, 2))
+        self.velocity_intermediate = np.resize(
+            self.velocity, (self.num_particles, 2)
+        )
 
         self.viscosity_forces = np.resize(
             self.viscosity_forces, (self.num_particles, 2)
@@ -111,10 +117,11 @@ class Particles:
 
     def update_neighbors(self, neighbors_list):
         """
-        Converts a list-of-lists neighbor structure into an efficient SoA
-format.
-        :param neighbors_list: List of neighbor indices per particle (list of
-        lists).
+                Converts a list-of-lists neighbor structure into an efficient
+        SoA format.
+                :param neighbors_list: List of neighbor indices per particle
+                (list of lists).
+
         """
         total_neighbors = sum(len(neigh) for neigh in neighbors_list)
         self.neighbor_indices = np.zeros(total_neighbors, dtype=np.int32)
@@ -129,15 +136,16 @@ format.
 
     def remove_type(self, type_to_remove: int):
         """
-        Removes all particles of the specified type from the system.
+                Removes all particles of the specified type from the system.
 
-        This method filters out all particles whose `types` attribute matches
-        the given `type_to_remove`. All associated particle properties are
-        updated. Note: This resets the neighbor information, so
-        update_neighbors should be called afterwards if neighbor data is
-needed.
-        :param type_to_remove: Particle type to remove.
-        
+                This method filters out all particles whose `types` attribute
+                matches the given `type_to_remove`. All associated particle
+                properties are updated. Note: This resets the neighbor
+                information, so update_neighbors should be called afterwards if
+        neighbor data is needed.
+                :param type_to_remove: Particle type to remove.
+
+
         """
         # Create a mask for particles to keep
         mask = self.types != type_to_remove
@@ -148,6 +156,7 @@ needed.
         # Update all particle properties using the mask
         self.position = self.position[mask]
         self.velocity = self.velocity[mask]
+        self.velocity_intermediate = self.velocity_intermediate[mask]
         self.viscosity_forces = self.viscosity_forces[mask]
         self.external_forces = self.external_forces[mask]
         self.pressure_forces = self.pressure_forces[mask]
