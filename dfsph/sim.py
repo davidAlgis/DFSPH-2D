@@ -390,14 +390,10 @@ class DFSPHSim:
         self.particles.velocity = self.particles.velocity_intermediate.copy()
 
     def compute_density_derivative(self, box: Box, box_not: Box):
-        disabled_indices = np.where(self.particles.types == -1)[0]
-        old_density_derivative = self.particles.density_derivative[
-            disabled_indices
-        ].copy()
         dfsph_pressure_solvers.compute_density_derivative_numba(
             self.particles.density,
             self.particles.position,
-            self.particles.velocity,
+            self.particles.velocity_intermediate,
             self.particles.mass,
             self.particles.types,
             self.particles.density_derivative,
@@ -410,16 +406,11 @@ class DFSPHSim:
             box,
             box_not,
         )
-        self.particles.density_derivative[disabled_indices] = (
-            old_density_derivative
-        )
 
     def adapt_velocity_divergence_free(self, box: Box, box_not: Box):
-        disabled_indices = np.where(self.particles.types == -1)[0]
-        old_velocity = self.particles.velocity[disabled_indices].copy()
         dfsph_pressure_solvers.adapt_velocity_divergence_free_numba(
             self.particles.position,
-            self.particles.velocity,
+            self.particles.velocity_intermediate,
             self.particles.density,
             self.particles.alpha,
             self.particles.mass,
@@ -434,7 +425,6 @@ class DFSPHSim:
             box,
             box_not,
         )
-        self.particles.velocity[disabled_indices] = old_velocity
 
     def compute_divergence_error(self, box: Box, box_not: Box):
         density_derivative_errors = 0
@@ -460,6 +450,7 @@ class DFSPHSim:
         max_iter = 24
         iter_count = 0
         density_derivative_avg = np.inf
+        self.particles.velocity_intermediate = self.particles.velocity.copy()
         while (iter_count < max_iter) and (
             abs(density_derivative_avg) > threshold_divergence
         ):
@@ -476,6 +467,8 @@ class DFSPHSim:
                 f"[Divergence Solver]: Max iteration reached! density"
                 f"derivative avg = {density_derivative_avg:.3f}"
             )
+
+        self.particles.velocity = self.particles.velocity_intermediate.copy()
 
     def export_data(self):
         if (
