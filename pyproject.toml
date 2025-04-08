@@ -18,6 +18,7 @@ dependencies = [
     "numba",
     "pyarrow",
     "pandas",
+    "imageio",
 ]
 
 [project.optional-dependencies]
