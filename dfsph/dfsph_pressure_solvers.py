@@ -69,14 +69,11 @@ def adapt_velocity_density_numba(
     n = velocity.shape[0]
     dt2 = dt * dt
     for i in prange(n):
-        # Skip disabled particles
-        if types[i] == -1:
+        if types[i] != 0:
             continue
         if not box.is_inside(
             position[i, 0], position[i, 1]
         ) or box_not.is_inside(position[i, 0], position[i, 1]):
-            continue
-        if types[i] != 0:
             continue
         if neighbor_counts[i] < 7:
             continue
