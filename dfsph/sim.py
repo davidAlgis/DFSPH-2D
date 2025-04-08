@@ -358,7 +358,7 @@ class DFSPHSim:
         density_errors = 0
         nbr_particles_compute = 0
         for i in range(self.num_particles):
-            if self.particles.types[i] == -1:
+            if self.particles.types[i] != 0:
                 continue
             pos = self.particles.position[i]
             if box.is_inside(pos[0], pos[1]) and not box_not.is_inside(
