@@ -194,14 +194,11 @@ class DFSPHSim:
     def predict_intermediate_velocity(self, box: Box, box_not: Box):
         fluid_mask = self.particles.types == 0
         for i in range(self.num_particles):
-            if self.particles.types[i] == -1:
+            if self.particles.types[i] != 0:
                 continue
-            if not fluid_mask[i]:
-                continue
-            if not box.is_inside(
-                self.particles.position[i, 0], self.particles.position[i, 1]
-            ) or box_not.is_inside(
-                self.particles.position[i, 0], self.particles.position[i, 1]
+            pos = self.particles.position[i]
+            if not box.is_inside(pos[0], pos[1]) or box_not.is_inside(
+                pos[0], pos[1]
             ):
                 continue
             self.particles.external_forces[i] = (
@@ -210,19 +207,15 @@ class DFSPHSim:
 
         total_force = (
             self.particles.viscosity_forces
-            # + self.particles.pressure_forces
             + self.particles.surface_tension_forces
             + self.particles.external_forces
         )
         for i in range(self.num_particles):
-            if self.particles.types[i] == -1:
+            if self.particles.types[i] != 0:
                 continue
-            if not fluid_mask[i]:
-                continue
-            if not box.is_inside(
-                self.particles.position[i, 0], self.particles.position[i, 1]
-            ) or box_not.is_inside(
-                self.particles.position[i, 0], self.particles.position[i, 1]
+            pos = self.particles.position[i]
+            if not box.is_inside(pos[0], pos[1]) or box_not.is_inside(
+                pos[0], pos[1]
             ):
                 continue
             self.particles.velocity[i] += (
@@ -461,6 +454,8 @@ class DFSPHSim:
         iter_count = 0
         density_derivative_avg = np.inf
         self.particles.velocity_intermediate = self.particles.velocity.copy()
+        active_mask = self.particles.types == 0
+        self.particles.pressure_forces[active_mask] = 0
         while (iter_count < max_iter) and (
             abs(density_derivative_avg) > threshold_divergence
         ):
@@ -478,8 +473,6 @@ class DFSPHSim:
                 f"derivative avg = {density_derivative_avg:.3f}"
             )
 
-        self.particles.velocity = self.particles.velocity_intermediate.copy()
-
     def export_data(self):
         if (
             self.export_path
@@ -489,6 +482,16 @@ class DFSPHSim:
                 self.particles, self.export_path, self.sim_time
             )
             self.last_export_time = self.sim_time
+
+    def integrate_velocity(self, box: Box, box_not: Box):
+        self.explosion_check(box, box_not)
+
+        for i in range(self.num_particles):
+            if self.particles.types[i] != 0:
+                continue
+            self.particles.velocity[i] += (
+                self.particles.pressure_forces[i] / self.particles.mass[i]
+            ) * self.dt
 
     def update(self):
         # Create a Box from the grid parameters and an "empty" box_not.
@@ -510,5 +513,6 @@ class DFSPHSim:
         self.find_neighbors()
         self.compute_density_and_alpha(box, box_not)
         self.solve_divergence_free(box, box_not)
+        self.integrate_velocity(box, box_not)
         self.sim_time += self.dt
         self.export_data()
