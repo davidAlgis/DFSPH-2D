@@ -208,7 +208,7 @@ def adapt_velocity_divergence_free_numba(
                 force_pressure_corr0 += scalar * gradwij[0]
                 force_pressure_corr1 += scalar * gradwij[1]
 
-        pressure_forces[i, 0] = mass[i] * force_pressure_corr0
-        pressure_forces[i, 1] = mass[i] * force_pressure_corr1
+        pressure_forces[i, 0] -= mass[i] * force_pressure_corr0
+        pressure_forces[i, 1] -= mass[i] * force_pressure_corr1
         velocity[i, 0] -= dt * force_pressure_corr0
         velocity[i, 1] -= dt * force_pressure_corr1
