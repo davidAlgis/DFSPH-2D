@@ -252,3 +252,38 @@ def compute_surface_tension_forces_updated_numba(
                 )
         surf_forces[i] = accum
     return surf_forces
+
+# ----------------------------------------------------------------------
+# Disabled‑particle compaction
+# ----------------------------------------------------------------------
+@njit(parallel=True)
+def filter_disabled_neighbors_numba(
+    types, neighbor_indices, neighbor_starts, neighbor_counts
+):
+    """
+    In–place compaction of neighbour lists:
+        • keeps the layout you already rely on
+        • does NOT allocate new arrays
+        • updates neighbor_counts so later kernels
+          never iterate over a disabled particle again
+    """
+    n = neighbor_starts.shape[0]
+
+    for i in prange(n):
+        start = neighbor_starts[i]
+        count = neighbor_counts[i]
+
+        # quick exit – common for boundary particles
+        if count == 0:
+            continue
+
+        write = start  # next slot to keep
+        end = start + count  # one past the last original slot
+
+        for read in range(start, end):
+            idx = neighbor_indices[read]
+            if types[idx] != -1:  # only copy enabled particles
+                neighbor_indices[write] = idx
+                write += 1
+
+        neighbor_counts[i] = write - start  # how many survived

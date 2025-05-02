@@ -56,18 +56,12 @@ class DFSPHSim:
         self.update_mass_solid(box, box_not)
 
     def filter_disabled_neighbors(self):
-        """Removes any neighbor entries corresponding to disabled (type -1) particles."""
-        for i in range(self.num_particles):
-            start = self.particles.neighbor_starts[i]
-            count = self.particles.neighbor_counts[i]
-            new_count = 0
-            for j in range(count):
-                idx = self.particles.neighbor_indices[start + j]
-                if self.particles.types[idx] == -1:
-                    continue
-                self.particles.neighbor_indices[start + new_count] = idx
-                new_count += 1
-            self.particles.neighbor_counts[i] = new_count
+        sphjit.filter_disabled_neighbors_numba(
+            self.particles.types,
+            self.particles.neighbor_indices,
+            self.particles.neighbor_starts,
+            self.particles.neighbor_counts,
+        )
 
     def compute_density_and_alpha(self, box: Box, box_not: Box):
         densities, alphas = sphjit.compute_density_alpha_numba(
