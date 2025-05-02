@@ -51,7 +51,7 @@ def main():
         "--box_origin",
         type=float,
         nargs=2,
-        default=[-1.3, -1.8],
+        default=[-2.5, -1.2],
         help="Origin of the box for particle initialization (default: -1.3"
         "-1.8)",
     )
@@ -59,21 +59,21 @@ def main():
         "--box_size",
         type=float,
         nargs=2,
-        default=[1, 1],
+        default=[5, 2.5],
         help="Size of the box for particle initialization (default: 1 1)",
     )
     parser.add_argument(
         "--grid_origin",
         type=float,
         nargs=2,
-        default=[-1.5, -2],
+        default=[-3, -1.5],
         help="Position of the grid in simulation space (default: -1.5 -2)",
     )
     parser.add_argument(
         "--grid_size",
         type=int,
         nargs=2,
-        default=[3, 4],
+        default=[6, 3.5],
         help="Grid dimensions as (width, height) (default: 3 4)",
     )
 
@@ -121,7 +121,7 @@ def main():
         "--path_gif",
         type=str,
         default="",
-        help='Path to save the simulation GIF. An empty string disables GIF'
+        help="Path to save the simulation GIF. An empty string disables GIF"
         'saving (default: "")',
     )
 
